@@ -1,5 +1,7 @@
 # DSH Desktop
 
+[简体中文](README.md) | [English](README.en.md)
+
 将 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 原生 Web 界面封装为轻量桌面应用。当前实现面向 Windows x64，采用 Tauri 2 + 固定版本 Node Sidecar，后续可扩展其他平台。
 
 ## 已确定边界
