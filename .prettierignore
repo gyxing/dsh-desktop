@@ -1,0 +1,7 @@
+dist
+node_modules
+src-tauri/target
+src-tauri/binaries
+src-tauri/resources
+runtime/pnpm-lock.yaml
+pnpm-lock.yaml

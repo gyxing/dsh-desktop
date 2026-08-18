@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>DSH Desktop</title>
+  </head>
+  <body class="app-shell">
+    <main class="startup-page" aria-labelledby="startup-title">
+      <div class="startup-ambient startup-ambient-top" aria-hidden="true"></div>
+      <div class="startup-ambient startup-ambient-bottom" aria-hidden="true"></div>
+
+      <header class="startup-header">
+        <div class="startup-brand">
+          <div class="startup-brand-mark" aria-hidden="true">DSH</div>
+          <div class="startup-brand-copy">
+            <span class="startup-brand-name">DSH Desktop</span>
+            <span class="startup-brand-meta">DeepSeek Harness Runtime</span>
+          </div>
+        </div>
+        <div class="startup-local-status">
+          <span class="startup-local-dot" aria-hidden="true"></span>
+          本地运行 · 127.0.0.1
+        </div>
+      </header>
+
+      <section id="startup-stage" class="startup-stage" data-phase="starting">
+        <div class="startup-kicker">
+          <span class="startup-kicker-dot" aria-hidden="true"></span>
+          <span id="runtime-kicker">本地运行时</span>
+        </div>
+
+        <h1 id="startup-title" class="startup-title">正在准备 DeepSeek Harness</h1>
+        <p id="startup-description" class="startup-description">
+          正在启动本地运行时，通常只需几秒。
+        </p>
+
+        <ol id="runtime-progress" class="startup-progress" aria-label="启动进度">
+          <li class="startup-progress-step is-active" data-runtime-step="0" aria-current="step">
+            <span class="startup-progress-node" aria-hidden="true"></span>
+            <span class="startup-progress-label">启动运行时</span>
+          </li>
+          <li class="startup-progress-step" data-runtime-step="1">
+            <span class="startup-progress-node" aria-hidden="true"></span>
+            <span class="startup-progress-label">检查本地服务</span>
+          </li>
+          <li class="startup-progress-step" data-runtime-step="2">
+            <span class="startup-progress-node" aria-hidden="true"></span>
+            <span class="startup-progress-label">加载工作界面</span>
+          </li>
+        </ol>
+
+        <div class="startup-live-status">
+          <div id="runtime-indicator" class="startup-status-indicator" aria-hidden="true"></div>
+          <svg class="startup-state-symbol" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6" />
+            <path
+              d="M12 7.5v5.5m0 3.4v.1"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+          <div class="startup-status-copy">
+            <p id="runtime-message" class="startup-message" role="status" aria-live="polite">
+              正在启动本地运行时…
+            </p>
+            <p id="runtime-error-code" class="startup-error-code" hidden></p>
+          </div>
+        </div>
+
+        <div class="startup-actions">
+          <button id="retry-button" class="startup-button" type="button" hidden>重新启动</button>
+          <button
+            id="diagnostics-button"
+            class="startup-button startup-button-secondary"
+            type="button"
+            hidden
+          >
+            复制诊断信息
+          </button>
+        </div>
+        <p id="action-feedback" class="startup-feedback" role="status" aria-live="polite"></p>
+      </section>
+
+      <footer class="startup-footer">
+        <span class="startup-tray-note">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect
+              x="4.5"
+              y="6.5"
+              width="15"
+              height="10"
+              rx="2"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <path
+              d="M8 19h8m-4-2.5V19"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+            />
+          </svg>
+          关闭窗口后，可从系统托盘重新打开
+        </span>
+        <span>Local runtime · Windows</span>
+      </footer>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

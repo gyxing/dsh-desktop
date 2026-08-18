@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.19.0
+      - name: 准备工具链
+        shell: pwsh
+        run: |
+          corepack enable
+          rustup update stable --no-self-update
+          rustup default stable
+      - name: 安装依赖
+        shell: pwsh
+        run: corepack pnpm install --frozen-lockfile
+      - name: 暂存固定运行时
+        shell: pwsh
+        run: corepack pnpm runtime:stage
+      - name: 执行完整检查
+        shell: pwsh
+        run: corepack pnpm check
+      - name: 构建全机 NSIS 安装包
+        shell: pwsh
+        run: corepack pnpm tauri build --bundles nsis

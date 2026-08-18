@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "target": "x86_64-pc-windows-msvc",
+  "pnpmVersion": "11.22.0",
+  "node": {
+    "version": "24.19.0",
+    "url": "https://nodejs.org/dist/v24.19.0/win-x64/node.exe",
+    "sha256": "3602f2bb1a10f2cbab4c36886218a33c1ab3db87290e73b033c46c77147d0237",
+    "licenseUrl": "https://raw.githubusercontent.com/nodejs/node/v24.19.0/LICENSE"
+  },
+  "dsh": {
+    "version": "0.1.0-rc.6",
+    "integrity": "sha512-brpZfED7ieRa2PQ5tUxMhHrM1pb2CmKFVM/f6yMULBDMicahk+Z2OsHgTwTDnoiZm23Ftu9rQz0NN4pflaoJcg==",
+    "upstreamCommit": "47f943859bef60e4160492346772ded9b24f765a"
+  }
+}

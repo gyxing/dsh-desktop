@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.cache/
+.idea/
+runtime/node_modules/
+src-tauri/target/
+src-tauri/binaries/*.exe
+src-tauri/resources/dsh-runtime/
+src-tauri/gen/
+*.log

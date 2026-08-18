@@ -1,0 +1,38 @@
+{
+  "name": "dsh-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1420",
+    "build": "tsc --noEmit && vite build",
+    "lint": "eslint . && stylelint \"src/**/*.css\"",
+    "format:check": "prettier --check .",
+    "runtime:stage": "node scripts/stage-runtime.mjs",
+    "runtime:verify": "node scripts/verify-runtime.mjs",
+    "runtime:check-upstream": "node scripts/check-upstream.mjs",
+    "resources:measure": "pwsh.exe -NoProfile -File scripts/measure-resources.ps1",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
+    "check": "pnpm runtime:verify && pnpm lint && pnpm format:check && pnpm format:rust && pnpm build && pnpm test:rust && cargo check --manifest-path src-tauri/Cargo.toml",
+    "tauri": "tauri",
+    "tauri:dev": "pnpm runtime:stage && tauri dev",
+    "tauri:build": "pnpm runtime:stage && tauri build --bundles nsis"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@tauri-apps/cli": "2.11.4",
+    "eslint": "10.8.1",
+    "pnpm": "11.22.0",
+    "prettier": "3.9.6",
+    "stylelint": "17.14.1",
+    "stylelint-config-standard": "40.0.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.67.0",
+    "vite": "8.2.1"
+  }
+}
