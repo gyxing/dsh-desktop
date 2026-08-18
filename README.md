@@ -8,7 +8,8 @@
 - Key、URL、模型、Provider、协议、Profile 和缓存全部沿用上游 DSH。
 - 不设置或迁移 `DSH_HOME`，不建立第二套配置，也不把凭据写入系统凭据库。
 - Sidecar 只监听随机 `127.0.0.1` 端口；远程页面不开放 Tauri IPC。
-- Windows 安装器为全机 NSIS，POC 阶段不签名、不启用自动更新。
+- 当前不使用 Windows Authenticode，首次安装可能显示未知发布者或 SmartScreen 提示。
+- 在线更新使用 Tauri Updater 独立签名校验，只安装能够通过应用内置公钥验证的完整更新包。
 
 ## 固定版本
 
@@ -34,10 +35,14 @@ corepack pnpm tauri dev
 
 - 点击窗口右上角关闭按钮只会隐藏窗口，DSH 继续在后台运行。
 - 单击系统托盘图标可重新显示并聚焦主窗口。
-- 托盘菜单提供运行状态、DSH PowerShell、重新启动 Harness 和明确退出。
+- 原生窗口标题栏以 `DSH Desktop <版本号>` 显示当前桌面版本；加载 DSH 页面后仍保持可见。
+- 托盘菜单提供运行状态、更新状态、DSH PowerShell、重新启动 Harness、检查更新和明确退出。
 - 只有托盘“退出”才会回收桌面壳、Node 和完整 DSH 进程树。
 - “打开 DSH PowerShell”优先使用外部 PowerShell 7；缺失时回退 Windows PowerShell 5.1。
 - 专用 PowerShell 只在自己的进程内提供随包 `node`、`dsh`、`pnpm`，不会修改系统 PATH、PowerShell Profile 或 `DSH_HOME`。
+- 应用启动约 30 秒后自动检查一次更新，托盘也可以随时手动检查；后台检查失败不会阻塞主窗口。
+- 发现新版本后由用户确认是否下载；完整安装包验签成功后才停止 Sidecar，以被动模式安装并重启应用。
+- 更新只替换桌面应用和随包运行时，不迁移、不重写现有 DSH Profile、缓存或凭据。
 
 启动页会依次展示进程启动、本机 HTTP 检查和页面加载状态。失败时可手动重新启动或复制当前进程内的脱敏诊断；诊断不会持久化或自动上传。
 
@@ -46,10 +51,12 @@ corepack pnpm tauri dev
 ```powershell
 corepack pnpm runtime:verify
 corepack pnpm check
-corepack pnpm tauri:build
+corepack pnpm tauri build --bundles nsis --no-sign
 ```
 
-NSIS 安装包输出在 `src-tauri/target/release/bundle/nsis/`。安装模式为 `perMachine`；未签名安装包会显示 Windows 信誉提示，仅适合 POC 验证。
+本地 NSIS 构建使用 `--no-sign`，只验证普通打包流程。正式发布由 GitHub Releases 工作流生成完整安装包、在线更新清单和校验文件。
+
+NSIS 安装包输出在 `src-tauri/target/release/bundle/nsis/`，安装模式为 `perMachine`。Windows 不信任 Tauri `.sig`，它只用于应用内更新验签；由于安装包未做 Authenticode，首次安装仍可能显示未知发布者或 SmartScreen 提示。
 
 WebView2 使用 `embedBootstrapper`：安装器内含微软 Evergreen 引导程序；目标机器缺少运行时时会联网静默下载安装，不捆绑 Fixed Runtime。
 
@@ -66,7 +73,7 @@ corepack pnpm runtime:check-upstream
 3. 更新 `pnpm-lock.yaml`，重新执行运行时暂存、完整检查和桌面冒烟验证。
 4. 重新构建并发布安装包。
 
-由于 DSH 和 Node 被嵌入安装包，上游更新后必须重新打包发布；当前 POC 不从网络热替换可执行代码。后续如启用 Tauri Updater，应采用签名的整包原子更新。
+由于 DSH 和 Node 被嵌入安装包，上游更新后必须重新打包发布。当前 GitHub Releases 更新流程只分发能够通过 Tauri Updater 签名校验的完整安装包，不从网络热替换单个可执行文件或依赖。
 
 ## POC 资源门槛
 
@@ -78,4 +85,4 @@ corepack pnpm runtime:check-upstream
 
 `resources:measure` 为避免触发“关闭后隐藏到托盘”，测量完成后会强制结束桌面根进程并验证 Job Object 回收；托盘“退出”的正常路径仍需按人工验收清单确认。
 
-上游 DSH 与依赖包的许可证保留在随包运行时中，Node 许可证位于 `NODE-LICENSE`。对外分发前还应完成代码签名、第三方许可证清单和品牌使用审核。
+上游 DSH 与依赖包的许可证保留在随包运行时中，Node 许可证位于 `NODE-LICENSE`。对外分发前还应完成第三方许可证清单和品牌使用审核；若要消除 Windows 发布者提示，仍需购买并配置受信任的 Authenticode 证书。

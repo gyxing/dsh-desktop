@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
   push:
+    branches:
+      - master
   workflow_dispatch:
 
 permissions:
@@ -39,4 +41,4 @@ jobs:
         run: corepack pnpm check
       - name: 构建全机 NSIS 安装包
         shell: pwsh
-        run: corepack pnpm tauri build --bundles nsis
+        run: corepack pnpm tauri build --bundles nsis --no-sign

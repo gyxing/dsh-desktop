@@ -12,6 +12,7 @@
     "runtime:stage": "node scripts/stage-runtime.mjs",
     "runtime:verify": "node scripts/verify-runtime.mjs",
     "runtime:check-upstream": "node scripts/check-upstream.mjs",
+    "release:verify": "node scripts/verify-release-version.mjs",
     "resources:measure": "pwsh.exe -NoProfile -File scripts/measure-resources.ps1",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",

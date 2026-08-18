@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.19.0
+      - name: 准备工具链
+        shell: pwsh
+        run: |
+          corepack enable
+          rustup update stable --no-self-update
+          rustup default stable
+          gh --version
+      - name: 安装依赖
+        shell: pwsh
+        run: corepack pnpm install --frozen-lockfile
+      - name: 验证发布来源
+        shell: pwsh
+        run: |
+          corepack pnpm release:verify -- $env:GITHUB_REF_NAME
+          git fetch origin master --depth=1
+          $tagCommit = git rev-parse HEAD
+          $masterCommit = git rev-parse origin/master
+          if ($tagCommit -ne $masterCommit) {
+            throw "发布标签必须指向 origin/master 头部：tag=$tagCommit master=$masterCommit"
+          }
+      - name: 检查 Release 是否可写
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $json = gh release view $env:GITHUB_REF_NAME --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0 -and -not ($json | ConvertFrom-Json).isDraft) {
+            throw "Release $env:GITHUB_REF_NAME 已发布，禁止覆盖资产"
+          }
+      - name: 暂存固定运行时
+        shell: pwsh
+        run: corepack pnpm runtime:stage
+      - name: 执行完整检查
+        shell: pwsh
+        run: corepack pnpm check
+      - name: 构建并上传更新资产
+        id: tauri
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: DSH Desktop ${{ github.ref_name }}
+          releaseBody: |
+            Windows x64 全机安装包；当前未使用 Windows Authenticode，首次安装可能显示未知发布者或 SmartScreen 提示。
+          releaseDraft: true
+          prerelease: false
+          generateReleaseNotes: true
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          uploadUpdaterSignatures: true
+          tauriScript: pnpm tauri
+          args: --bundles nsis
+      - name: 上传安装包 SHA-256
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: |
+          $paths = $env:ARTIFACT_PATHS | ConvertFrom-Json
+          $installerPath = $paths |
+            Where-Object { $_ -like '*\bundle\nsis\*.exe' } |
+            Select-Object -First 1
+          if (-not $installerPath) { throw '未找到 NSIS 安装包' }
+          $installer = Get-Item -LiteralPath $installerPath
+          $checksumPath = "$($installer.FullName).sha256"
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -LiteralPath $checksumPath -Value "$hash  $($installer.Name)" -Encoding ascii -NoNewline
+          gh release upload $env:GITHUB_REF_NAME $checksumPath --clobber
