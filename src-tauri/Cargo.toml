@@ -13,10 +13,12 @@ dunce = "=1.0.5"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 tauri = { version = "=2.11.5", features = ["tray-icon"] }
+tauri-plugin-dialog = "=2.7.2"
 tauri-plugin-shell = "=2.3.5"
 tauri-plugin-single-instance = "=2.4.3"
+tauri-plugin-updater = "=2.10.1"
 thiserror = "=2.0.20"
-tokio = { version = "=1.53.1", features = ["io-util", "macros", "net", "rt", "time"] }
+tokio = { version = "=1.53.1", features = ["io-util", "macros", "net", "rt", "sync", "time"] }
 url = "=2.5.8"
 
 [target.'cfg(windows)'.dependencies]

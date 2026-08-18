@@ -7,6 +7,7 @@ use crate::desktop::{
     navigation, tray,
 };
 use crate::runtime::{manager::RuntimeManager, status::RuntimeStatus};
+use crate::updater::{manager::UpdateManager, service::spawn_automatic_check};
 
 #[tauri::command]
 fn runtime_status(runtime: State<'_, Arc<RuntimeManager>>) -> RuntimeStatus {
@@ -23,15 +24,25 @@ fn restart_runtime(app: AppHandle, runtime: State<'_, Arc<RuntimeManager>>) -> R
     runtime.inner().clone().start(&app)
 }
 
+/// 版本来自统一包元数据；页面导航可能覆盖标题，因此启动和加载完成时都会重设。
+fn set_main_window_title(app: &AppHandle) {
+    let title = format!("DSH Desktop {}", app.package_info().version);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_title(&title);
+    }
+}
+
 /// 创建并运行 DSH Desktop 的 Tauri 应用。
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             tray::show_main_window(app);
         }))
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(navigation::init())
         .manage(Arc::new(RuntimeManager::new()))
+        .manage(Arc::new(UpdateManager::new()))
         .manage(AppLifecycle::new())
         .invoke_handler(tauri::generate_handler![
             runtime_status,
@@ -43,6 +54,7 @@ pub fn run() {
                 return;
             }
             let app = webview.app_handle();
+            set_main_window_title(app);
             app.state::<Arc<RuntimeManager>>()
                 .mark_page_ready(app, payload.url());
         })
@@ -58,10 +70,14 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            set_main_window_title(app.handle());
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
             tray::setup(app)?;
             let handle = app.handle().clone();
             let runtime = app.state::<Arc<RuntimeManager>>().inner().clone();
             let _ = runtime.start(&handle);
+            spawn_automatic_check(handle);
             Ok(())
         })
         .build(tauri::generate_context!())

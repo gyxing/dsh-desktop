@@ -30,6 +30,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "publisher": "gyxing",
     "category": "DeveloperTool",
     "shortDescription": "DeepSeek Harness 的第三方桌面封装",
@@ -44,6 +45,15 @@
         "installMode": "perMachine",
         "languages": ["SimpChinese", "English"],
         "displayLanguageSelector": false
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc1NUIyMjg5MTUyQUYwRTQKUldUazhDb1ZpU0piZFFBbUh2RDA2OGFSblFWVVYxUE5ydjI2MTQ0NjA4THhWU2djOGMwejhmRk8K",
+      "endpoints": ["https://github.com/gyxing/dsh-desktop/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

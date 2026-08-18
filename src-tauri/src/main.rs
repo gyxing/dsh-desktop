@@ -3,6 +3,7 @@
 mod app;
 mod desktop;
 mod runtime;
+mod updater;
 
 fn main() {
     app::run();
