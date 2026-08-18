@@ -81,7 +81,28 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: DSH Desktop ${{ github.ref_name }}
           releaseBody: |
-            Windows x64 全机安装包；当前未使用 Windows Authenticode，首次安装可能显示未知发布者或 SmartScreen 提示。
+            DSH Desktop 是 DeepSeek Harness 的第三方 Windows 桌面封装。
+
+            ## 安装说明
+
+            1. 下载本 Release 的 `DSH Desktop_<版本号>_x64-setup.exe`。
+            2. 运行安装程序；这是全机安装，Windows 可能要求管理员权限。
+            3. 已有 DSH Profile、模型配置、插件、缓存和凭据不会被迁移或重写。
+
+            目标机器缺少 WebView2 时，安装程序会使用内置引导程序联网安装。
+
+            ## 发布资产
+
+            - `*.exe`：Windows x64 安装包。
+            - `*.exe.sha256`：安装包 SHA-256 校验文件。
+            - `*.exe.sig`：应用内在线更新验签文件。
+            - `latest.json`：在线更新清单。
+
+            ## 已知限制
+
+            - 当前仅提供 Windows x64 安装包。
+            - 当前未使用 Windows Authenticode，首次安装可能显示未知发布者或 SmartScreen 提示。
+            - 在线更新使用完整安装包，不是增量补丁。
           releaseDraft: true
           prerelease: false
           generateReleaseNotes: true
