@@ -28,11 +28,13 @@ jobs:
           - name: macOS ARM64
             runner: macos-15
             target: aarch64-apple-darwin
-            bundles: app,dmg
+            bundles: app
+            release_arch: aarch64
           - name: macOS Intel
             runner: macos-15-intel
             target: x86_64-apple-darwin
-            bundles: app,dmg
+            bundles: app
+            release_arch: x64
           - name: Linux x64
             runner: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
@@ -65,4 +67,16 @@ jobs:
       - name: 执行完整检查
         run: corepack pnpm check
       - name: 构建原生安装包
+        if: runner.os != 'macOS'
         run: corepack pnpm tauri build --verbose --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --no-sign
+      - name: 构建 macOS 应用包
+        if: runner.os == 'macOS'
+        run: corepack pnpm tauri build --verbose --target ${{ matrix.target }} --bundles app --no-sign
+      - name: 生成 macOS DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          bash scripts/package-macos-dmg.sh \
+            "src-tauri/target/${{ matrix.target }}/release/bundle/macos/DSH Desktop.app" \
+            "src-tauri/target/${{ matrix.target }}/release/bundle/dmg/DSH Desktop_${version}_${{ matrix.release_arch }}.dmg"

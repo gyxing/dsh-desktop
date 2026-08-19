@@ -65,7 +65,7 @@ corepack pnpm tauri build --target <macOS目标三元组> --bundles app,dmg --no
 corepack pnpm tauri build --target x86_64-unknown-linux-gnu --bundles appimage,deb --no-sign
 ```
 
-本地命令使用 `--no-sign`，只验证普通打包流程。正式发布由 GitHub Actions 在四个原生 Runner 上构建并汇总到同一个 Draft Release，同时生成 Tauri Updater 签名与 SHA-256 校验文件。
+本地命令使用 `--no-sign`，只验证普通打包流程。正式发布由 GitHub Actions 在四个原生 Runner 上构建并汇总到同一个 Draft Release，同时生成 Tauri Updater 签名与 SHA-256 校验文件。托管 macOS Runner 会先构建 `.app`，再由 `scripts/package-macos-dmg.sh` 单步生成 DMG，避免临时镜像卸载故障。
 
 Windows NSIS 使用 `perMachine` 全机安装；WebView2 使用 `embedBootstrapper`，缺少运行时时由微软 Evergreen 引导程序联网安装。Windows 不信任 Tauri `.sig`，该签名只用于应用内更新验签。
 

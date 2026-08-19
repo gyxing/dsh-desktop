@@ -65,7 +65,7 @@ corepack pnpm tauri build --target <macOS-target-triple> --bundles app,dmg --no-
 corepack pnpm tauri build --target x86_64-unknown-linux-gnu --bundles appimage,deb --no-sign
 ```
 
-Local commands use `--no-sign` to validate ordinary packaging. Official releases are built on four native GitHub Actions runners and collected in one Draft Release with Tauri Updater signatures and SHA-256 checksum files.
+Local commands use `--no-sign` to validate ordinary packaging. Official releases are built on four native GitHub Actions runners and collected in one Draft Release with Tauri Updater signatures and SHA-256 checksum files. Hosted macOS runners build the `.app` first, then `scripts/package-macos-dmg.sh` creates the DMG in one pass to avoid temporary-image detach failures.
 
 Windows NSIS installs per machine. WebView2 uses `embedBootstrapper`, so Microsoft's Evergreen bootstrapper downloads the runtime when it is missing. Tauri `.sig` files are used only for in-app update verification and are not Authenticode signatures.
 

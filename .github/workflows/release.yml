@@ -29,13 +29,15 @@ jobs:
           - name: macOS ARM64
             runner: macos-15
             target: aarch64-apple-darwin
-            bundles: app,dmg
+            bundles: app
+            release_arch: aarch64
             updater_json: false
             asset_pattern: '[name]_[version]_[arch].[ext]'
           - name: macOS Intel
             runner: macos-15-intel
             target: x86_64-apple-darwin
-            bundles: app,dmg
+            bundles: app
+            release_arch: x64
             updater_json: false
             asset_pattern: '[name]_[version]_[arch].[ext]'
           - name: Linux x64
@@ -176,13 +178,28 @@ jobs:
           releaseAssetNamePattern: ${{ matrix.asset_pattern }}
           tauriScript: pnpm tauri
           args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: 生成并上传 macOS DMG
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          dmg_path="src-tauri/target/${{ matrix.target }}/release/bundle/dmg/DSH Desktop_${version}_${{ matrix.release_arch }}.dmg"
+          bash scripts/package-macos-dmg.sh \
+            "src-tauri/target/${{ matrix.target }}/release/bundle/macos/DSH Desktop.app" \
+            "$dmg_path"
+          gh release upload "$GITHUB_REF_NAME" "$dmg_path" --clobber
+          echo "MACOS_DMG_PATH=$dmg_path" >> "$GITHUB_ENV"
+
       - name: 上传安装包 SHA-256
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
         run: |
-          $paths = $env:ARTIFACT_PATHS | ConvertFrom-Json
+          $paths = @($env:ARTIFACT_PATHS | ConvertFrom-Json)
+          if ($env:MACOS_DMG_PATH) { $paths += $env:MACOS_DMG_PATH }
           $packages = $paths | Where-Object {
             $_ -match '\.(exe|dmg|AppImage|deb)$' -and (Test-Path -LiteralPath $_ -PathType Leaf)
           }
