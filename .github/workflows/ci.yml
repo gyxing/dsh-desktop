@@ -65,4 +65,4 @@ jobs:
       - name: 执行完整检查
         run: corepack pnpm check
       - name: 构建原生安装包
-        run: corepack pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --no-sign
+        run: corepack pnpm tauri build --verbose --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --no-sign
