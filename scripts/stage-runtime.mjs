@@ -1,4 +1,4 @@
-import { cp, copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { cp, copyFile, mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { delimiter, dirname, isAbsolute, join, relative } from 'node:path';
 
@@ -79,6 +79,41 @@ async function prepareNodeLicense(nodeLock) {
   throw lastError;
 }
 
+const nodePtyPrebuildByTarget = new Map([
+  ['x86_64-pc-windows-msvc', 'win32-x64'],
+  ['aarch64-apple-darwin', 'darwin-arm64'],
+  ['x86_64-apple-darwin', 'darwin-x64'],
+  ['x86_64-unknown-linux-gnu', 'linux-x64'],
+]);
+
+/** 删除依赖包附带的非目标原生制品，避免打包器扫描错误架构或ABI。 */
+async function pruneUnusedNativeArtifacts(target) {
+  const nodePtyPrebuildRoot = join(runtimeStageDirectory, 'node_modules', 'node-pty', 'prebuilds');
+  const expectedNodePtyPrebuild = nodePtyPrebuildByTarget.get(target);
+  if (!expectedNodePtyPrebuild) {
+    throw new Error(`缺少node-pty目标映射：${target}`);
+  }
+  const nodePtyEntries = await readdir(nodePtyPrebuildRoot, { withFileTypes: true });
+  if (
+    !nodePtyEntries.some((entry) => entry.isDirectory() && entry.name === expectedNodePtyPrebuild)
+  ) {
+    throw new Error(`node-pty缺少目标预构建：${expectedNodePtyPrebuild}`);
+  }
+  await Promise.all(
+    nodePtyEntries
+      .filter((entry) => entry.isDirectory() && entry.name !== expectedNodePtyPrebuild)
+      .map((entry) => rm(join(nodePtyPrebuildRoot, entry.name), { recursive: true, force: true })),
+  );
+
+  if (target === 'x86_64-unknown-linux-gnu') {
+    // Koffi 的Linux x64包同时携带glibc与musl制品，本目标只保留glibc版本。
+    await rm(
+      join(runtimeStageDirectory, 'node_modules', '@koromix', 'koffi-linux-x64', 'musl_x64'),
+      { recursive: true, force: true },
+    );
+  }
+}
+
 /** 使用目标Node执行pnpm，确保原生依赖针对Sidecar平台和ABI安装。 */
 async function stageRuntime() {
   const target = resolveRuntimeTarget();
@@ -120,6 +155,7 @@ async function stageRuntime() {
     ],
     { cwd: rootDirectory, env: runtimeEnvironment },
   );
+  await pruneUnusedNativeArtifacts(target);
 
   await copyFile(licenseCachePath, join(runtimeStageDirectory, 'NODE-LICENSE'));
   await cp(
