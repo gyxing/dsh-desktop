@@ -40,7 +40,7 @@
       "icons/icon.ico"
     ],
     "externalBin": ["binaries/node"],
-    "resources": ["resources/dsh-runtime"]
+    "resources": ["resources/dsh-runtime", "resources/dsh-desktop"]
   },
   "plugins": {
     "updater": {

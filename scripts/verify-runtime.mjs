@@ -103,6 +103,14 @@ async function verifyRuntime() {
     throw new Error(`pnpm冒烟输出异常：${String(pnpmVersionOutput)}`);
   }
 
+  await runCommand(
+    process.execPath,
+    [join(rootDirectory, 'scripts', 'verify-desktop-compatibility.mjs')],
+    {
+      cwd: rootDirectory,
+    },
+  );
+
   const sizeMiB = (inspection.bytes / 1024 / 1024).toFixed(2);
   console.info(
     `运行时校验通过：目标 ${target}，Node ${runtimeLock.node.version}，DSH ${runtimeLock.dsh.version}，pnpm ${runtimeLock.pnpmVersion}，${sizeMiB} MiB，原生模块 ${inspection.nativeModuleCount} 个`,

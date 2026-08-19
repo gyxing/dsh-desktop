@@ -6,9 +6,10 @@ DSH Desktop packages the native [DeepSeek Harness](https://github.com/deepseek-a
 
 ## Confirmed Boundaries
 
-- The desktop shell only manages startup, readiness checks, window navigation, and process-tree cleanup.
+- The desktop shell only manages startup, desktop-runtime compatibility, readiness checks, window navigation, and process-tree cleanup.
 - Keys, URLs, models, providers, protocols, profiles, and caches continue to use upstream DSH behavior.
 - The application does not set or migrate `DSH_HOME`, create a second configuration system, or store credentials in an operating-system credential vault.
+- When the Web profile enables `@struktoai/mirage-dsh`, Desktop adds a process-local compatibility overlay that retains the host-native filesystem and platform shell. It does not rewrite the profile, and external `dsh web` runs are unaffected.
 - The sidecar listens only on a random `127.0.0.1` port, and the remote page has no access to Tauri IPC.
 - Windows Authenticode signing is not configured, so first-time installation may show an unknown publisher or SmartScreen warning.
 - Apple Developer signing and notarization are not configured; macOS DMGs are internal test packages.

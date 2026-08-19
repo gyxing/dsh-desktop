@@ -5,5 +5,6 @@ pub mod manager;
 pub mod paths;
 mod process;
 pub mod process_tree;
+pub(crate) mod profile_compatibility;
 pub mod readiness;
 pub(crate) mod status;

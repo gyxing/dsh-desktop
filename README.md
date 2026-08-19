@@ -6,9 +6,10 @@
 
 ## 已确定边界
 
-- 桌面壳只负责启动、就绪检测、窗口跳转和进程树回收。
+- 桌面壳只负责启动、桌面运行兼容、就绪检测、窗口跳转和进程树回收。
 - Key、URL、模型、Provider、协议、Profile 和缓存全部沿用上游 DSH。
 - 不设置或迁移 `DSH_HOME`，不建立第二套配置，也不把凭据写入操作系统凭据库。
+- Web Profile 启用 `@struktoai/mirage-dsh` 时，Desktop 仅为 Sidecar 追加进程内兼容覆盖，保留宿主原生文件系统和平台 Shell；不会改写 Profile，外部 `dsh web` 不受影响。
 - Sidecar 只监听随机 `127.0.0.1` 端口；远程页面不开放 Tauri IPC。
 - Windows 当前不使用 Authenticode，首次安装可能显示未知发布者或 SmartScreen 提示。
 - macOS 当前未配置 Apple Developer 签名和公证，DMG 仅作为内部测试包。

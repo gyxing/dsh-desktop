@@ -1,0 +1,20 @@
+# DSH Desktop 始终使用宿主原生文件系统与平台 Shell。
+# 该最终覆盖层只影响桌面 Sidecar，不修改用户的 DSH Profile；
+# 避免社区虚拟工作区 Provider 把 Windows 路径解析为 POSIX 只读挂载。
+- id: fs-sandbox
+  disabled: false
+
+- id: bash-sandbox
+  disabled: !!js process.platform === 'win32'
+
+- id: pwsh-sandbox
+  disabled: !!js process.platform !== 'win32'
+
+- id: mirage
+  disabled: true
+
+- id: mirage-fs
+  disabled: true
+
+- id: mirage-shell
+  disabled: true

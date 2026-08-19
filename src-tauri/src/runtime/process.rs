@@ -1,4 +1,4 @@
-use std::process::Stdio;
+use std::{ffi::OsString, path::Path, process::Stdio};
 
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
@@ -10,6 +10,24 @@ use super::paths::RuntimePaths;
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+/// 生成 Desktop Sidecar 参数；最终补丁位于 Profile 层之后，只约束桌面运行时。
+fn desktop_launch_arguments(compatibility_patch: Option<&Path>) -> Vec<OsString> {
+    let mut arguments = vec![OsString::from("web")];
+    if let Some(compatibility_patch) = compatibility_patch {
+        arguments.extend([
+            OsString::from("--patch"),
+            compatibility_patch.as_os_str().to_owned(),
+        ]);
+    }
+    arguments.extend([
+        OsString::from("--host"),
+        OsString::from("127.0.0.1"),
+        OsString::from("--port"),
+        OsString::from("0"),
+    ]);
+    arguments
+}
 
 /// Sidecar输出与退出事件，保持运行时状态机不依赖具体进程库。
 #[derive(Debug)]
@@ -44,7 +62,9 @@ pub fn spawn(
     let mut command = Command::new(&paths.node_executable);
     command
         .arg(&paths.dsh_entry)
-        .args(["web", "--host", "127.0.0.1", "--port", "0"])
+        .args(desktop_launch_arguments(
+            paths.compatibility_patch.as_deref(),
+        ))
         .current_dir(&paths.working_directory)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -132,5 +152,44 @@ where
                 break;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{ffi::OsString, path::Path};
+
+    use super::desktop_launch_arguments;
+
+    #[test]
+    fn desktop_compatibility_patch_is_applied_after_profile_layers() {
+        let patch = Path::new("resources/dsh-desktop/cordis.patch.yml");
+
+        assert_eq!(
+            desktop_launch_arguments(Some(patch)),
+            vec![
+                OsString::from("web"),
+                OsString::from("--patch"),
+                patch.as_os_str().to_owned(),
+                OsString::from("--host"),
+                OsString::from("127.0.0.1"),
+                OsString::from("--port"),
+                OsString::from("0"),
+            ]
+        );
+    }
+
+    #[test]
+    fn native_profile_launches_without_a_compatibility_patch() {
+        assert_eq!(
+            desktop_launch_arguments(None),
+            vec![
+                OsString::from("web"),
+                OsString::from("--host"),
+                OsString::from("127.0.0.1"),
+                OsString::from("--port"),
+                OsString::from("0"),
+            ]
+        );
     }
 }
