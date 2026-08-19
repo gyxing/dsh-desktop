@@ -115,6 +115,8 @@ async function stageRuntime() {
       '--prod',
       '--config.node-linker=hoisted',
       '--config.package-import-method=copy',
+      // POSIX 默认使用符号链接生成 .bin；改为实体命令 shim 以保持打包运行时无链接。
+      '--config.prefer-symlinked-executables=false',
     ],
     { cwd: rootDirectory, env: runtimeEnvironment },
   );
