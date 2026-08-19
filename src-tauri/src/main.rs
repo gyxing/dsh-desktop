@@ -2,6 +2,7 @@
 
 mod app;
 mod desktop;
+mod platform;
 mod runtime;
 mod updater;
 

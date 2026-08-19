@@ -14,13 +14,13 @@ mod platform {
         },
     };
 
-    /// 持有 Windows Job Object；关闭句柄时系统会终止完整子进程树。
+    /// 持有Windows Job Object；关闭句柄时系统会终止完整子进程树。
     pub struct ProcessTreeGuard {
         job: isize,
     }
 
     impl ProcessTreeGuard {
-        /// 创建 Job Object 并立即把 Sidecar 根进程纳入管理。
+        /// 创建Job Object并立即把Sidecar根进程纳入管理。
         pub fn attach(process_id: u32) -> io::Result<Self> {
             unsafe {
                 let job = CreateJobObjectW(ptr::null(), ptr::null());
@@ -56,6 +56,9 @@ mod platform {
                 Ok(Self { job: job as isize })
             }
         }
+
+        /// 消费守卫并关闭Job Object，让系统同步回收完整进程树。
+        pub fn terminate(self) {}
     }
 
     impl Drop for ProcessTreeGuard {
@@ -73,16 +76,52 @@ mod platform {
     }
 }
 
-#[cfg(windows)]
-pub use platform::ProcessTreeGuard;
+#[cfg(unix)]
+mod platform {
+    use std::{io, thread, time::Duration};
 
-#[cfg(not(windows))]
-pub struct ProcessTreeGuard;
+    /// 持有Unix进程组ID；显式退出先TERM，超时后再KILL。
+    pub struct ProcessTreeGuard {
+        process_group: i32,
+        armed: bool,
+    }
 
-#[cfg(not(windows))]
-impl ProcessTreeGuard {
-    /// 其他平台将在对应移植阶段替换为原生进程组管理。
-    pub fn attach(_process_id: u32) -> std::io::Result<Self> {
-        Ok(Self)
+    impl ProcessTreeGuard {
+        /// Sidecar在spawn前已设置自己的进程组，PID即进程组ID。
+        pub fn attach(process_id: u32) -> io::Result<Self> {
+            let process_group = i32::try_from(process_id)
+                .map_err(|_| io::Error::other("Sidecar进程ID超出Unix进程组范围"))?;
+            Ok(Self {
+                process_group,
+                armed: true,
+            })
+        }
+
+        /// 请求进程组优雅退出，并在两秒后做有界强制回收。
+        pub fn terminate(mut self) {
+            let process_group = self.process_group;
+            self.armed = false;
+            unsafe {
+                libc::kill(-process_group, libc::SIGTERM);
+            }
+            thread::spawn(move || {
+                thread::sleep(Duration::from_secs(2));
+                unsafe {
+                    libc::kill(-process_group, libc::SIGKILL);
+                }
+            });
+        }
+    }
+
+    impl Drop for ProcessTreeGuard {
+        fn drop(&mut self) {
+            if self.armed {
+                unsafe {
+                    libc::kill(-self.process_group, libc::SIGKILL);
+                }
+            }
+        }
     }
 }
+
+pub use platform::ProcessTreeGuard;

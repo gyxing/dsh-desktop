@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use tauri::{path::BaseDirectory, AppHandle, Manager};
 
+use crate::platform;
+
 const DSH_ENTRY: &str = "resources/dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js";
 const PNPM_ENTRY: &str = "resources/dsh-runtime/node_modules/pnpm/bin/pnpm.cjs";
 
@@ -27,11 +29,7 @@ impl RuntimePaths {
             .resolve(PNPM_ENTRY, BaseDirectory::Resource)
             .map_err(|error| format!("无法解析 pnpm 运行时：{error}"))?;
         let pnpm_entry = dunce::simplified(&pnpm_entry).to_path_buf();
-        let node_executable = std::env::current_exe()
-            .map_err(|error| format!("无法解析桌面程序路径：{error}"))?
-            .parent()
-            .map(|directory| directory.join("node.exe"))
-            .ok_or_else(|| "桌面程序路径没有父目录".to_string())?;
+        let node_executable = platform::resolve_node_executable()?;
 
         if !dsh_entry.is_file() {
             return Err("DSH 运行时文件不存在，请重新安装应用".to_string());

@@ -1,10 +1,13 @@
-import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, relative } from 'node:path';
+import { cp, copyFile, mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
+import { delimiter, dirname, isAbsolute, join, relative } from 'node:path';
 
-import { stageNodeBinary } from './download-node.mjs';
+import { calculateSha256, stageNodeBinary } from './download-node.mjs';
+import { assertNativeTarget, resolveRuntimeTarget } from './platform-target.mjs';
 import {
   readRuntimeLock,
   rootDirectory,
+  runtimeCacheDirectory,
   runtimePackageName,
   runtimeStageDirectory,
   npmRegistry,
@@ -12,22 +15,80 @@ import {
 } from './runtime-config.mjs';
 import { runCommand } from './run-command.mjs';
 
-async function downloadLicense(url, targetPath) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Node 许可证下载失败：${response.status}`);
+async function hashOrEmpty(filePath) {
+  try {
+    return await calculateSha256(filePath);
+  } catch {
+    return '';
   }
-
-  await writeFile(targetPath, await response.text(), 'utf8');
 }
 
-/** 使用目标 Node 执行 pnpm，确保原生依赖针对 Sidecar ABI 安装。 */
+/** 缓存并校验既有Node许可证，避免每次暂存都依赖外部网络。 */
+async function prepareNodeLicense(nodeLock) {
+  const cachePath = join(runtimeCacheDirectory, `node-v${nodeLock.version}-LICENSE`);
+  await mkdir(runtimeCacheDirectory, { recursive: true });
+  if ((await hashOrEmpty(cachePath)) === nodeLock.licenseSha256) {
+    return cachePath;
+  }
+
+  const reusableCandidates = [
+    join(runtimeStageDirectory, 'NODE-LICENSE'),
+    join(
+      rootDirectory,
+      'src-tauri',
+      'target',
+      'release',
+      'resources',
+      'dsh-runtime',
+      'NODE-LICENSE',
+    ),
+    join(rootDirectory, 'src-tauri', 'target', 'debug', 'resources', 'dsh-runtime', 'NODE-LICENSE'),
+  ];
+  for (const candidate of reusableCandidates) {
+    if ((await hashOrEmpty(candidate)) === nodeLock.licenseSha256) {
+      await copyFile(candidate, cachePath);
+      return cachePath;
+    }
+  }
+
+  const temporaryPath = `${cachePath}.download`;
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      await rm(temporaryPath, { force: true });
+      const response = await fetch(nodeLock.licenseUrl);
+      if (!response.ok) {
+        throw new Error(`Node许可证下载失败：${response.status}`);
+      }
+      await writeFile(temporaryPath, await response.text(), 'utf8');
+      const hash = await calculateSha256(temporaryPath);
+      if (hash !== nodeLock.licenseSha256) {
+        throw new Error('Node许可证SHA-256与版本锁不一致');
+      }
+      await rm(cachePath, { force: true });
+      await rename(temporaryPath, cachePath);
+      return cachePath;
+    } catch (error) {
+      lastError = error;
+      await rm(temporaryPath, { force: true });
+      if (attempt < 3) {
+        await delay(attempt * 1_000);
+      }
+    }
+  }
+  throw lastError;
+}
+
+/** 使用目标Node执行pnpm，确保原生依赖针对Sidecar平台和ABI安装。 */
 async function stageRuntime() {
+  const target = resolveRuntimeTarget();
+  assertNativeTarget(target);
   const runtimeLock = await readRuntimeLock();
-  const nodePaths = await stageNodeBinary(runtimeLock);
+  const nodePaths = await stageNodeBinary(runtimeLock, target);
+  const licenseCachePath = await prepareNodeLicense(runtimeLock.node);
   const runtimeEnvironment = {
     ...process.env,
-    PATH: `${nodePaths.cacheDirectory};${process.env.PATH ?? ''}`,
+    PATH: `${dirname(nodePaths.cacheBinary)}${delimiter}${process.env.PATH ?? ''}`,
     npm_config_registry: npmRegistry,
   };
 
@@ -58,20 +119,37 @@ async function stageRuntime() {
     { cwd: rootDirectory, env: runtimeEnvironment },
   );
 
-  await downloadLicense(runtimeLock.node.licenseUrl, join(runtimeStageDirectory, 'NODE-LICENSE'));
+  await copyFile(licenseCachePath, join(runtimeStageDirectory, 'NODE-LICENSE'));
   await cp(
     join(rootDirectory, 'runtime', 'runtime-lock.json'),
     join(runtimeStageDirectory, 'runtime-lock.json'),
   );
+  const manifest = {
+    schemaVersion: 2,
+    target,
+    pnpmVersion: runtimeLock.pnpmVersion,
+    node: {
+      version: nodePaths.nodeSpec.version,
+      url: nodePaths.nodeSpec.url,
+      format: nodePaths.nodeSpec.format,
+      sourceSha256: nodePaths.sourceSha256,
+      binarySha256: nodePaths.binarySha256,
+      licenseUrl: nodePaths.nodeSpec.licenseUrl,
+      licenseSha256: runtimeLock.node.licenseSha256,
+    },
+    dsh: runtimeLock.dsh,
+  };
   await writeFile(
     join(runtimeStageDirectory, 'runtime-manifest.json'),
-    `${JSON.stringify({ schemaVersion: 1, target: runtimeLock.target, pnpmVersion: runtimeLock.pnpmVersion, node: runtimeLock.node, dsh: runtimeLock.dsh }, null, 2)}\n`,
+    `${JSON.stringify(manifest, null, 2)}\n`,
     'utf8',
   );
 
-  await runCommand(process.execPath, [join(rootDirectory, 'scripts', 'verify-runtime.mjs')], {
-    cwd: rootDirectory,
-  });
+  await runCommand(
+    process.execPath,
+    [join(rootDirectory, 'scripts', 'verify-runtime.mjs'), '--target', target],
+    { cwd: rootDirectory },
+  );
 }
 
 await stageRuntime();

@@ -1,11 +1,11 @@
 use std::{sync::Arc, time::Duration};
 
-use tauri::{async_runtime::Receiver, AppHandle, Manager};
-use tauri_plugin_shell::process::CommandEvent;
+use tauri::{AppHandle, Manager};
+use tokio::sync::mpsc::UnboundedReceiver;
 
 use super::{
     diagnostics::DiagnosticSource, health::probe_http, manager::RuntimeManager,
-    readiness::parse_readiness, status::RuntimeErrorCode,
+    process::RuntimeEvent, readiness::parse_readiness, status::RuntimeErrorCode,
 };
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
@@ -16,7 +16,7 @@ pub fn observe(
     manager: Arc<RuntimeManager>,
     app: AppHandle,
     generation: u64,
-    mut receiver: Receiver<CommandEvent>,
+    mut receiver: UnboundedReceiver<RuntimeEvent>,
 ) {
     let event_manager = manager.clone();
     let event_app = app.clone();
@@ -44,11 +44,11 @@ fn handle_event(
     manager: &Arc<RuntimeManager>,
     app: &AppHandle,
     generation: u64,
-    event: CommandEvent,
+    event: RuntimeEvent,
 ) -> bool {
     match event {
-        CommandEvent::Stdout(line) => handle_stdout(manager, app, generation, &line),
-        CommandEvent::Error(error) => {
+        RuntimeEvent::Stdout(line) => handle_stdout(manager, app, generation, &line),
+        RuntimeEvent::Error(error) => {
             manager.fail(
                 app,
                 generation,
@@ -58,11 +58,11 @@ fn handle_event(
             );
             false
         }
-        CommandEvent::Terminated(payload) => {
-            manager.terminated(app, generation, payload.code);
+        RuntimeEvent::Terminated { code } => {
+            manager.terminated(app, generation, code);
             false
         }
-        CommandEvent::Stderr(line) => {
+        RuntimeEvent::Stderr(line) => {
             manager.record_diagnostic(
                 generation,
                 DiagnosticSource::Stderr,
@@ -70,7 +70,6 @@ fn handle_event(
             );
             true
         }
-        _ => true,
     }
 }
 

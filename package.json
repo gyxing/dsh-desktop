@@ -1,6 +1,6 @@
 {
   "name": "dsh-desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.22.0",
@@ -13,6 +13,7 @@
     "runtime:verify": "node scripts/verify-runtime.mjs",
     "runtime:check-upstream": "node scripts/check-upstream.mjs",
     "release:verify": "node scripts/verify-release-version.mjs",
+    "release:verify-updater": "node scripts/verify-updater-manifest.mjs",
     "resources:measure": "pwsh.exe -NoProfile -File scripts/measure-resources.ps1",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",

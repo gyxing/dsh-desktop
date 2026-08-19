@@ -13,8 +13,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  native:
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - name: Windows x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+            updater_json: true
+            asset_pattern: '[name]_[version]_[arch][setup].[ext]'
+          - name: macOS ARM64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+            updater_json: false
+            asset_pattern: '[name]_[version]_[arch].[ext]'
+          - name: macOS Intel
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            bundles: app,dmg
+            updater_json: false
+            asset_pattern: '[name]_[version]_[arch].[ext]'
+          - name: Linux x64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+            updater_json: true
+            asset_pattern: '[name]_[version]_[arch].[ext]'
+    runs-on: ${{ matrix.runner }}
+    env:
+      DSH_DESKTOP_TARGET: ${{ matrix.target }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -23,15 +55,19 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24.19.0
+      - name: 安装 Linux 系统依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
       - name: 准备工具链
-        shell: pwsh
         run: |
           corepack enable
           rustup update stable --no-self-update
           rustup default stable
+          rustup target add ${{ matrix.target }}
           gh --version
       - name: 安装依赖
-        shell: pwsh
         run: corepack pnpm install --frozen-lockfile
       - name: 验证发布来源
         shell: pwsh
@@ -65,12 +101,15 @@ jobs:
             throw "Release $env:GITHUB_REF_NAME 已发布，禁止覆盖资产"
           }
       - name: 暂存固定运行时
-        shell: pwsh
-        run: corepack pnpm runtime:stage
+        run: corepack pnpm runtime:stage -- --target ${{ matrix.target }}
       - name: 执行完整检查
-        shell: pwsh
         run: corepack pnpm check
-      - name: 构建并上传更新资产
+      - name: 读取内置 DSH 版本
+        shell: pwsh
+        run: |
+          $runtimeLock = Get-Content -LiteralPath runtime/runtime-lock.json -Raw -Encoding UTF8 | ConvertFrom-Json
+          "DSH_VERSION=$($runtimeLock.dsh.version)" >> $env:GITHUB_ENV
+      - name: 构建并上传跨平台资产
         id: tauri
         uses: tauri-apps/tauri-action@v1
         env:
@@ -83,63 +122,60 @@ jobs:
           releaseBody: |
             ## 中文说明
 
-            DSH Desktop 是 DeepSeek Harness 的第三方 Windows 桌面封装。
+            DSH Desktop 是 DeepSeek Harness 的第三方跨平台桌面封装，本版本内置 DeepSeek Harness `${{ env.DSH_VERSION }}`。
 
             ### 安装说明
 
-            1. 下载本 Release 的 `DSH Desktop_<版本号>_x64-setup.exe`。
-            2. 运行安装程序；这是全机安装，Windows 可能要求管理员权限。
-            3. 已有 DSH Profile、模型配置、插件、缓存和凭据不会被迁移或重写。
+            - Windows x64：下载 `*_x64-setup.exe`，以全机模式安装，系统可能要求管理员权限。
+            - macOS：Apple Silicon 选择 ARM64 DMG，Intel Mac 选择 x64 DMG。当前包未做 Apple Developer 签名和公证，仅供内部测试。
+            - Linux x64：可直接运行 AppImage，或在 Debian/Ubuntu 上安装 deb 包。
+            - 现有 DSH Profile、模型配置、插件、缓存和凭据不会被迁移或重写。
 
-            目标机器缺少 WebView2 时，安装程序会使用内置引导程序联网安装。
+            ### 更新与签名
 
-            ### 发布资产
-
-            - `*.exe`：Windows x64 安装包。
-            - `*.exe.sha256`：安装包 SHA-256 校验文件。
-            - `*.exe.sig`：应用内在线更新验签文件。
-            - `latest.json`：在线更新清单。
+            - Windows NSIS 和 Linux AppImage 进入 Tauri Updater 在线更新清单。
+            - Linux deb 由用户手动升级；macOS 在完成 Apple 正式签名前不进入公开更新清单。
+            - `*.sig` 只用于应用内更新验签，不等同于 Windows Authenticode、Apple Developer 签名或 Linux 发行签名。
 
             ### 已知限制
 
-            - 当前仅提供 Windows x64 安装包。
-            - 当前未使用 Windows Authenticode，首次安装可能显示未知发布者或 SmartScreen 提示。
-            - 在线更新使用完整安装包，不是增量补丁。
+            - Windows 未配置 Authenticode，可能显示未知发布者或 SmartScreen 提示。
+            - macOS 未签名、未公证，Gatekeeper 可能阻止直接启动。
+            - macOS 与 Linux 仍需在对应真实桌面环境完成最终输入、剪贴板、托盘和终端验收。
 
             ---
 
             ## English
 
-            DSH Desktop is a third-party Windows desktop wrapper for DeepSeek Harness.
+            DSH Desktop is a third-party cross-platform desktop wrapper for DeepSeek Harness. This release bundles DeepSeek Harness `${{ env.DSH_VERSION }}`.
 
             ### Installation
 
-            1. Download `DSH Desktop_<version>_x64-setup.exe` from this release.
-            2. Run the installer. This is a per-machine installation, so Windows may request administrator privileges.
-            3. Existing DSH profiles, model settings, plugins, caches, and credentials are not migrated or rewritten.
+            - Windows x64: download `*_x64-setup.exe`. It installs per machine and may request administrator privileges.
+            - macOS: use the ARM64 DMG on Apple Silicon or the x64 DMG on Intel Macs. These builds are unsigned and unnotarized internal test packages.
+            - Linux x64: run the AppImage directly, or install the deb package on Debian/Ubuntu.
+            - Existing DSH profiles, model settings, plugins, caches, and credentials are not migrated or rewritten.
 
-            If WebView2 is missing, the bundled bootstrapper downloads and installs it.
+            ### Updates and signing
 
-            ### Release Assets
+            - Windows NSIS and Linux AppImage are included in the Tauri Updater manifest.
+            - Linux deb upgrades remain manual. macOS is excluded from public updates until Apple signing is configured.
+            - `*.sig` files protect in-app updates only; they are not Windows Authenticode, Apple Developer signing, or Linux distribution signatures.
 
-            - `*.exe`: Windows x64 installer.
-            - `*.exe.sha256`: SHA-256 checksum file for the installer.
-            - `*.exe.sig`: Signature used by the in-app updater.
-            - `latest.json`: Online update manifest.
+            ### Known limitations
 
-            ### Known Limitations
-
-            - Only Windows x64 packages are currently provided.
-            - Windows Authenticode signing is not configured, so first-time installation may show an unknown publisher or SmartScreen warning.
-            - Online updates download a complete installer rather than a delta patch.
+            - Windows may show an unknown publisher or SmartScreen warning because Authenticode is not configured.
+            - macOS Gatekeeper may block direct launch because the app is unsigned and unnotarized.
+            - macOS and Linux still require final input, clipboard, tray, and terminal acceptance on real desktop environments.
           releaseDraft: true
           prerelease: false
           generateReleaseNotes: true
-          uploadUpdaterJson: true
+          uploadUpdaterJson: ${{ matrix.updater_json }}
           updaterJsonPreferNsis: true
           uploadUpdaterSignatures: true
+          releaseAssetNamePattern: ${{ matrix.asset_pattern }}
           tauriScript: pnpm tauri
-          args: --bundles nsis
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - name: 上传安装包 SHA-256
         shell: pwsh
         env:
@@ -147,12 +183,62 @@ jobs:
           ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
         run: |
           $paths = $env:ARTIFACT_PATHS | ConvertFrom-Json
-          $installerPath = $paths |
-            Where-Object { $_ -like '*\bundle\nsis\*.exe' } |
-            Select-Object -First 1
-          if (-not $installerPath) { throw '未找到 NSIS 安装包' }
-          $installer = Get-Item -LiteralPath $installerPath
-          $checksumPath = "$($installer.FullName).sha256"
-          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-          Set-Content -LiteralPath $checksumPath -Value "$hash  $($installer.Name)" -Encoding ascii -NoNewline
-          gh release upload $env:GITHUB_REF_NAME $checksumPath --clobber
+          $packages = $paths | Where-Object {
+            $_ -match '\.(exe|dmg|AppImage|deb)$' -and (Test-Path -LiteralPath $_ -PathType Leaf)
+          }
+          if (-not $packages) { throw '未找到需要生成校验文件的安装包' }
+          foreach ($packagePath in $packages) {
+            $package = Get-Item -LiteralPath $packagePath
+            $checksumPath = "$($package.FullName).sha256"
+            $hash = (Get-FileHash -LiteralPath $package.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            Set-Content -LiteralPath $checksumPath -Value "$hash  $($package.Name)" -Encoding ascii -NoNewline
+            gh release upload $env:GITHUB_REF_NAME $checksumPath --clobber
+          }
+
+  verify-release:
+    name: 校验 Draft Release
+    needs: native
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.19.0
+      - name: 下载并校验更新清单
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Path release-assets | Out-Null
+          gh release download $env:GITHUB_REF_NAME --pattern latest.json --dir release-assets
+          $version = $env:GITHUB_REF_NAME.Substring(1)
+          node scripts/verify-updater-manifest.mjs release-assets/latest.json --version $version --require windows-x86_64-nsis --require linux-x86_64-appimage --forbid-prefix darwin-
+      - name: 校验 Draft Release 资产
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $release = gh release view $env:GITHUB_REF_NAME --json assets,isDraft,isPrerelease | ConvertFrom-Json
+          if (-not $release.isDraft -or $release.isPrerelease) { throw 'Release 必须保持为非预发布 Draft' }
+          $names = @($release.assets | ForEach-Object name)
+          $requirements = @(
+            @{ Label = 'Windows安装包'; Pattern = '\.exe$'; Minimum = 1 },
+            @{ Label = 'Windows更新签名'; Pattern = '\.exe\.sig$'; Minimum = 1 },
+            @{ Label = 'macOS DMG'; Pattern = '\.dmg$'; Minimum = 2 },
+            @{ Label = 'macOS更新归档'; Pattern = '\.app\.tar\.gz$'; Minimum = 2 },
+            @{ Label = 'macOS更新签名'; Pattern = '\.app\.tar\.gz\.sig$'; Minimum = 2 },
+            @{ Label = 'Linux AppImage'; Pattern = '\.AppImage$'; Minimum = 1 },
+            @{ Label = 'Linux deb'; Pattern = '\.deb$'; Minimum = 1 },
+            @{ Label = 'Linux更新签名'; Pattern = '\.AppImage(?:\.tar\.gz)?\.sig$'; Minimum = 1 },
+            @{ Label = 'SHA-256校验文件'; Pattern = '\.sha256$'; Minimum = 5 },
+            @{ Label = '更新清单'; Pattern = '^latest\.json$'; Minimum = 1 }
+          )
+          foreach ($requirement in $requirements) {
+            $count = @($names | Where-Object { $_ -match $requirement.Pattern }).Count
+            if ($count -lt $requirement.Minimum) {
+              throw "$($requirement.Label)数量不足：期望至少$($requirement.Minimum)，实际$count"
+            }
+          }
+          Write-Output "Draft Release资产校验通过，共$($names.Count)个资产"

@@ -3,12 +3,15 @@ import { spawn } from 'node:child_process';
 /** 运行构建命令，并将真实退出码作为构建结果。 */
 export async function runCommand(command, args, options = {}) {
   return await new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
+    const spawnOptions = {
       cwd: options.cwd,
       env: options.env,
       stdio: options.capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
-      windowsHide: true,
-    });
+    };
+    if (process.platform === 'win32') {
+      spawnOptions.windowsHide = true;
+    }
+    const child = spawn(command, args, spawnOptions);
 
     let output = '';
     child.stdout?.on('data', (chunk) => {

@@ -1,13 +1,13 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use tauri::{AppHandle, Emitter, Manager, Runtime};
-use tauri_plugin_shell::{process::CommandChild, ShellExt};
 use url::Url;
 
 use super::{
     diagnostics::{DiagnosticBuffer, DiagnosticSource},
     events,
     paths::RuntimePaths,
+    process::{self, ManagedChild},
     process_tree::ProcessTreeGuard,
     status::{RuntimeErrorCode, RuntimeStatus},
 };
@@ -18,7 +18,7 @@ const MAX_DIAGNOSTIC_BYTES: usize = 256 * 1024;
 struct RuntimeState {
     generation: u64,
     status: RuntimeStatus,
-    child: Option<CommandChild>,
+    child: Option<ManagedChild>,
     process_tree: Option<ProcessTreeGuard>,
     shell_url: Option<Url>,
     runtime_url: Option<Url>,
@@ -176,30 +176,13 @@ impl RuntimeManager {
     ) -> Result<(), (RuntimeErrorCode, String)> {
         let paths = RuntimePaths::resolve(app)
             .map_err(|error| (RuntimeErrorCode::RuntimeMissing, error))?;
-        let (receiver, child) = app
-            .shell()
-            .sidecar("node")
-            .map_err(|error| {
-                (
-                    RuntimeErrorCode::SpawnFailed,
-                    format!("无法创建 Node Sidecar：{error}"),
-                )
-            })?
-            .arg(paths.dsh_entry)
-            .args(["web", "--host", "127.0.0.1", "--port", "0"])
-            .current_dir(paths.working_directory)
-            .spawn()
-            .map_err(|error| {
-                (
-                    RuntimeErrorCode::SpawnFailed,
-                    format!("无法执行 Node Sidecar：{error}"),
-                )
-            })?;
+        let (receiver, child) =
+            process::spawn(&paths).map_err(|error| (RuntimeErrorCode::SpawnFailed, error))?;
 
         let process_tree = match ProcessTreeGuard::attach(child.pid()) {
             Ok(process_tree) => process_tree,
             Err(error) => {
-                let _ = child.kill();
+                child.kill();
                 return Err((
                     RuntimeErrorCode::ProcessTreeFailed,
                     format!("无法管理 Sidecar 进程树：{error}"),
@@ -358,13 +341,14 @@ impl RuntimeManager {
     }
 }
 
-fn terminate_resources(child: Option<CommandChild>, process_tree: Option<ProcessTreeGuard>) {
-    if let Some(child) = child {
-        let _ = child.kill();
+fn terminate_resources(child: Option<ManagedChild>, process_tree: Option<ProcessTreeGuard>) {
+    if let Some(process_tree) = process_tree {
+        process_tree.terminate();
+        drop(child);
+    } else if let Some(child) = child {
+        child.kill();
     }
-    drop(process_tree);
 }
-
 fn emit_status(app: &AppHandle, status: RuntimeStatus) {
     crate::desktop::tray::update_runtime_status(app, &status);
     let _ = app.emit("runtime://status", status);

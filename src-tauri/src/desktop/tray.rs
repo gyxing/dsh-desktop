@@ -6,14 +6,12 @@ use tauri::{
     App, AppHandle, Manager, Wry,
 };
 
-use super::{lifecycle::AppLifecycle, terminal::open_dsh_powershell};
+use super::{lifecycle::AppLifecycle, terminal::open_dsh_terminal};
 use crate::{
+    platform,
     runtime::{manager::RuntimeManager, status::RuntimeStatus},
     updater::{manager::UpdateManager, status::UpdateStatus},
 };
-
-#[cfg(windows)]
-use windows_sys::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
 
 const OPEN_ID: &str = "tray-open";
 const STATUS_ID: &str = "tray-status";
@@ -106,8 +104,7 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
         false,
         None::<&str>,
     )?;
-    let terminal_item =
-        MenuItem::with_id(app, TERMINAL_ID, "打开 DSH PowerShell", true, None::<&str>)?;
+    let terminal_item = MenuItem::with_id(app, TERMINAL_ID, "打开 DSH 终端", true, None::<&str>)?;
     let restart_item = MenuItem::with_id(
         app,
         RESTART_ID,
@@ -157,6 +154,14 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
                 show_main_window(tray.app_handle());
             }
         });
+    #[cfg(target_os = "macos")]
+    {
+        let icon = tauri::image::Image::from_bytes(include_bytes!(
+            "../../../assets/icons/tray-template.png"
+        ))?;
+        builder = builder.icon(icon).icon_as_template(true);
+    }
+    #[cfg(not(target_os = "macos"))]
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
     }
@@ -210,16 +215,16 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
     match id {
         OPEN_ID => show_main_window(app),
         TERMINAL_ID => {
-            if let Err(error) = open_dsh_powershell(app) {
+            if let Err(error) = open_dsh_terminal(app) {
                 app.state::<Arc<RuntimeManager>>()
-                    .record_system_diagnostic(&format!("打开 DSH PowerShell 失败：{error}"));
-                show_native_error("无法打开 DSH PowerShell", &error.to_string());
+                    .record_system_diagnostic(&format!("打开 DSH 终端失败：{error}"));
+                platform::show_native_error(app, "无法打开 DSH 终端", &error.to_string());
             }
         }
         RESTART_ID => {
             let runtime = app.state::<Arc<RuntimeManager>>().inner().clone();
             if let Err(error) = runtime.start(app) {
-                show_native_error("无法重新启动 DeepSeek Harness", &error);
+                platform::show_native_error(app, "无法重新启动 DeepSeek Harness", &error);
             }
         }
         CHECK_UPDATE_ID => crate::updater::service::spawn_manual_check(app),
@@ -232,31 +237,6 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
         }
         _ => {}
     }
-}
-
-#[cfg(windows)]
-fn show_native_error(title: &str, message: &str) {
-    let title = title
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    let message = message
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect::<Vec<_>>();
-    unsafe {
-        MessageBoxW(
-            std::ptr::null_mut(),
-            message.as_ptr(),
-            title.as_ptr(),
-            MB_OK | MB_ICONERROR,
-        );
-    }
-}
-
-#[cfg(not(windows))]
-fn show_native_error(_title: &str, message: &str) {
-    eprintln!("{message}");
 }
 
 #[cfg(test)]

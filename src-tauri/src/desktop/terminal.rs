@@ -37,13 +37,16 @@ pub struct PowerShellExecutable {
 pub enum TerminalError {
     #[error("未找到可用的 PowerShell 7 或 Windows PowerShell 5.1")]
     PowerShellUnavailable,
+    #[cfg(not(windows))]
+    #[error("未找到可用的系统终端：{0}")]
+    SystemTerminalUnavailable(String),
     #[error("无法读取桌面运行时：{0}")]
     Runtime(String),
     #[error("无法读取固定版本信息：{0}")]
     Versions(#[from] serde_json::Error),
-    #[error("无法构造 DSH PowerShell PATH：{0}")]
+    #[error("无法构造 DSH 终端 PATH：{0}")]
     Path(#[from] std::env::JoinPathsError),
-    #[error("无法准备 DSH PowerShell：{0}")]
+    #[error("无法准备 DSH 终端：{0}")]
     Io(#[from] std::io::Error),
 }
 
@@ -161,6 +164,10 @@ Write-Host 'Commands: dsh --dump-config | dsh plugin --help | pnpm --version'
     )
 }
 
+/// 按当前平台打开独立DSH终端，不修改系统或用户配置。
+pub fn open_dsh_terminal(app: &AppHandle) -> Result<(), TerminalError> {
+    crate::platform::open_external_terminal(app)
+}
 /// 打开独立 PowerShell；只给该子进程注入随包命令，不改变系统或用户配置。
 pub fn open_dsh_powershell(app: &AppHandle) -> Result<(), TerminalError> {
     let runtime = RuntimePaths::resolve(app).map_err(TerminalError::Runtime)?;
@@ -316,7 +323,7 @@ mod tests {
         let versions = runtime_versions().expect("运行时锁应能解析");
 
         assert_eq!(versions.node, "24.19.0");
-        assert_eq!(versions.dsh, "0.1.0-rc.6");
+        assert_eq!(versions.dsh, "0.1.0-rc.7");
         assert_eq!(versions.pnpm, "11.22.0");
     }
 }
