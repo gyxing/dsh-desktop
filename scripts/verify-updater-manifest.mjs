@@ -71,6 +71,10 @@ for (const [key, entry] of Object.entries(manifest.platforms)) {
   if (url.hostname !== 'github.com' || !url.pathname.includes('/releases/download/')) {
     throw new Error(`平台 ${key} 必须使用GitHub Release公开下载直链`);
   }
+  const expectedTagPath = `/releases/download/v${expectedVersion}/`;
+  if (!url.pathname.includes(expectedTagPath)) {
+    throw new Error(`平台 ${key} 的下载地址必须指向正式标签 v${expectedVersion}`);
+  }
 }
 
 console.log(`更新清单校验通过：${manifest.version}，平台 ${platformKeys.join(', ')}`);

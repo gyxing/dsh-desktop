@@ -1,9 +1,30 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const [manifestPath, assetsPath] = process.argv.slice(2).filter((argument) => argument !== '--');
-if (!manifestPath || !assetsPath) {
-  throw new Error('用法：normalize-updater-manifest.mjs <latest.json> <release-assets.json>');
+const args = process.argv.slice(2).filter((argument) => argument !== '--');
+const manifestPath = args.shift();
+const assetsPath = args.shift();
+let repository;
+let tag;
+for (let index = 0; index < args.length; index += 2) {
+  const option = args[index];
+  const value = args[index + 1];
+  if (!['--repository', '--tag'].includes(option) || !value) {
+    throw new Error(`无效参数：${option ?? '<empty>'}`);
+  }
+  if (option === '--repository') repository = value;
+  if (option === '--tag') tag = value;
+}
+if (!manifestPath || !assetsPath || !repository || !tag) {
+  throw new Error(
+    '用法：normalize-updater-manifest.mjs <latest.json> <release-assets.json> --repository <owner/repo> --tag <vX.Y.Z>',
+  );
+}
+if (!/^[0-9A-Za-z_.-]+\/[0-9A-Za-z_.-]+$/.test(repository)) {
+  throw new Error(`GitHub仓库格式无效：${repository}`);
+}
+if (!/^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(tag)) {
+  throw new Error(`发布标签格式无效：${tag}`);
 }
 
 const resolvedManifestPath = path.resolve(manifestPath);
@@ -16,21 +37,29 @@ if (!manifest.platforms || typeof manifest.platforms !== 'object') {
 
 const assetsByApiUrl = new Map(assets.map((asset) => [asset.url, asset]));
 const assetsByBrowserUrl = new Map(assets.map((asset) => [asset.browser_download_url, asset]));
+const assetsByName = new Map(assets.map((asset) => [asset.name, asset]));
 
 /** GitHub API资产地址需要认证和限流配额，公开更新必须改用Release下载直链。 */
 for (const [platform, entry] of Object.entries(manifest.platforms)) {
-  const asset = assetsByApiUrl.get(entry.url) ?? assetsByBrowserUrl.get(entry.url);
-  if (!asset?.browser_download_url) {
+  let currentName;
+  try {
+    const currentUrl = new URL(entry.url);
+    currentName = decodeURIComponent(currentUrl.pathname.split('/').at(-1));
+  } catch {
+    throw new Error(`平台 ${platform} 的原下载地址无效：${entry.url}`);
+  }
+  const asset =
+    assetsByApiUrl.get(entry.url) ??
+    assetsByBrowserUrl.get(entry.url) ??
+    assetsByName.get(currentName);
+  if (!asset?.name) {
     throw new Error(`平台 ${platform} 无法匹配GitHub Release资产：${entry.url}`);
   }
-  const downloadUrl = new URL(asset.browser_download_url);
-  if (
-    downloadUrl.protocol !== 'https:' ||
-    downloadUrl.hostname !== 'github.com' ||
-    !downloadUrl.pathname.includes('/releases/download/')
-  ) {
-    throw new Error(`平台 ${platform} 的公开下载地址无效：${downloadUrl}`);
-  }
+  // Draft的browser_download_url包含临时untagged路径，必须主动构造发布后的正式标签URL。
+  const assetName = encodeURIComponent(asset.name);
+  const downloadUrl = new URL(
+    `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/${assetName}`,
+  );
   entry.url = downloadUrl.toString();
 }
 

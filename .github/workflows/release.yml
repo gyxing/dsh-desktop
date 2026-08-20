@@ -246,7 +246,7 @@ jobs:
           $assets = @(gh api "repos/$env:GITHUB_REPOSITORY/releases/$($release.id)/assets?per_page=100" | ConvertFrom-Json)
           $assetsJson = ConvertTo-Json -InputObject $assets -Depth 10
           [IO.File]::WriteAllText('release-assets/release-assets.json', $assetsJson, [Text.UTF8Encoding]::new($false))
-          node scripts/normalize-updater-manifest.mjs release-assets/latest.json release-assets/release-assets.json
+          node scripts/normalize-updater-manifest.mjs release-assets/latest.json release-assets/release-assets.json --repository $env:GITHUB_REPOSITORY --tag $env:GITHUB_REF_NAME
           gh release upload $env:GITHUB_REF_NAME release-assets/latest.json --clobber
           $version = $env:GITHUB_REF_NAME.Substring(1)
           node scripts/verify-updater-manifest.mjs release-assets/latest.json --version $version --require windows-x86_64-nsis --require linux-x86_64-appimage --forbid-prefix darwin-
