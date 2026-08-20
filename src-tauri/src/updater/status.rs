@@ -22,6 +22,16 @@ pub enum UpdateStatus {
         downloaded: u64,
         total: Option<u64>,
     },
+    Retrying {
+        version: String,
+        downloaded: u64,
+        total: Option<u64>,
+        next_attempt: usize,
+        max_attempts: usize,
+    },
+    Verifying {
+        version: String,
+    },
     Installing {
         version: String,
     },

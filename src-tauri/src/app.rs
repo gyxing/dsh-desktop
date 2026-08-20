@@ -1,13 +1,21 @@
 use std::sync::Arc;
 
-use tauri::{webview::PageLoadEvent, AppHandle, Manager, RunEvent, State, WindowEvent};
+use tauri::{
+    webview::PageLoadEvent,
+    window::{ProgressBarState, ProgressBarStatus},
+    AppHandle, Manager, RunEvent, State, WindowEvent,
+};
 
 use crate::desktop::{
     lifecycle::{AppLifecycle, CloseAction},
     navigation, tray,
 };
 use crate::runtime::{manager::RuntimeManager, status::RuntimeStatus};
-use crate::updater::{manager::UpdateManager, service::spawn_automatic_check};
+use crate::updater::{
+    manager::UpdateManager,
+    presentation::{update_presentation, UpdateTaskbarProgress},
+    service::spawn_automatic_check,
+};
 
 #[tauri::command]
 fn runtime_status(runtime: State<'_, Arc<RuntimeManager>>) -> RuntimeStatus {
@@ -24,11 +32,34 @@ fn restart_runtime(app: AppHandle, runtime: State<'_, Arc<RuntimeManager>>) -> R
     runtime.inner().clone().start(&app)
 }
 
-/// 版本来自统一包元数据；页面导航可能覆盖标题，因此启动和加载完成时都会重设。
-fn set_main_window_title(app: &AppHandle) {
-    let title = format!("DSH Desktop {}", app.package_info().version);
+/// 页面导航可能覆盖标题，因此启动、加载完成和更新状态变化时都会重设原生展示。
+pub(crate) fn update_main_window_presentation(app: &AppHandle) {
+    let base_title = format!("DSH Desktop {}", app.package_info().version);
+    let update = app
+        .try_state::<Arc<UpdateManager>>()
+        .map(|manager| update_presentation(&manager.status()));
     if let Some(window) = app.get_webview_window("main") {
+        let title = update
+            .as_ref()
+            .and_then(|presentation| presentation.title_suffix.as_deref())
+            .map(|suffix| format!("{base_title} · {suffix}"))
+            .unwrap_or(base_title);
         let _ = window.set_title(&title);
+        let progress_state = match update.map(|presentation| presentation.taskbar_progress) {
+            Some(UpdateTaskbarProgress::Percentage(progress)) => ProgressBarState {
+                status: Some(ProgressBarStatus::Normal),
+                progress: Some(progress),
+            },
+            Some(UpdateTaskbarProgress::Indeterminate) => ProgressBarState {
+                status: Some(ProgressBarStatus::Indeterminate),
+                progress: None,
+            },
+            _ => ProgressBarState {
+                status: Some(ProgressBarStatus::None),
+                progress: None,
+            },
+        };
+        let _ = window.set_progress_bar(progress_state);
     }
 }
 
@@ -54,7 +85,7 @@ pub fn run() {
                 return;
             }
             let app = webview.app_handle();
-            set_main_window_title(app);
+            update_main_window_presentation(app);
             app.state::<Arc<RuntimeManager>>()
                 .mark_page_ready(app, payload.url());
         })
@@ -70,7 +101,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            set_main_window_title(app.handle());
+            update_main_window_presentation(app.handle());
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
             tray::setup(app)?;

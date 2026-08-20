@@ -851,10 +851,15 @@ dependencies = [
 
 [[package]]
 name = "dsh-desktop"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
+ "base64 0.22.1",
  "dunce",
+ "futures-util",
  "libc",
+ "minisign-verify",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "tauri",

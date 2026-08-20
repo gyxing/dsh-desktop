@@ -65,6 +65,12 @@ for (const [key, entry] of Object.entries(manifest.platforms)) {
     throw new Error(`平台 ${key} 的下载地址无效`);
   }
   if (url.protocol !== 'https:') throw new Error(`平台 ${key} 的下载地址必须使用 HTTPS`);
+  if (url.hostname === 'api.github.com') {
+    throw new Error(`平台 ${key} 不得使用受限流影响的GitHub API资产地址`);
+  }
+  if (url.hostname !== 'github.com' || !url.pathname.includes('/releases/download/')) {
+    throw new Error(`平台 ${key} 必须使用GitHub Release公开下载直链`);
+  }
 }
 
 console.log(`更新清单校验通过：${manifest.version}，平台 ${platformKeys.join(', ')}`);

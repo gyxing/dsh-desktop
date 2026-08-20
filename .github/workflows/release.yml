@@ -233,13 +233,21 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24.19.0
-      - name: 下载并校验更新清单
+      - name: 下载、规范化并校验更新清单
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           New-Item -ItemType Directory -Path release-assets | Out-Null
           gh release download $env:GITHUB_REF_NAME --pattern latest.json --dir release-assets
+          $releases = @(gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json)
+          $release = $releases | Where-Object tag_name -eq $env:GITHUB_REF_NAME | Select-Object -First 1
+          if (-not $release -or -not $release.draft) { throw '未找到可写的Draft Release' }
+          $assets = @(gh api "repos/$env:GITHUB_REPOSITORY/releases/$($release.id)/assets?per_page=100" | ConvertFrom-Json)
+          $assetsJson = ConvertTo-Json -InputObject $assets -Depth 10
+          [IO.File]::WriteAllText('release-assets/release-assets.json', $assetsJson, [Text.UTF8Encoding]::new($false))
+          node scripts/normalize-updater-manifest.mjs release-assets/latest.json release-assets/release-assets.json
+          gh release upload $env:GITHUB_REF_NAME release-assets/latest.json --clobber
           $version = $env:GITHUB_REF_NAME.Substring(1)
           node scripts/verify-updater-manifest.mjs release-assets/latest.json --version $version --require windows-x86_64-nsis --require linux-x86_64-appimage --forbid-prefix darwin-
       - name: 校验 Draft Release 资产

@@ -10,7 +10,7 @@ use super::{lifecycle::AppLifecycle, terminal::open_dsh_terminal};
 use crate::{
     platform,
     runtime::{manager::RuntimeManager, status::RuntimeStatus},
-    updater::{manager::UpdateManager, status::UpdateStatus},
+    updater::{manager::UpdateManager, presentation::update_presentation},
 };
 
 const OPEN_ID: &str = "tray-open";
@@ -32,12 +32,6 @@ pub struct DesktopTray {
 pub struct TrayRuntimePresentation {
     pub status_label: &'static str,
     pub restart_enabled: bool,
-}
-
-/// 描述更新状态在托盘中的可见文字与交互可用性。
-pub struct UpdateTrayPresentation {
-    pub status_label: String,
-    pub check_enabled: bool,
 }
 
 pub fn runtime_presentation(status: &RuntimeStatus) -> TrayRuntimePresentation {
@@ -69,23 +63,6 @@ pub fn runtime_presentation(status: &RuntimeStatus) -> TrayRuntimePresentation {
     }
 }
 
-/// 把更新内部状态映射为托盘文字和手动检查可用性。
-pub fn update_presentation(status: &UpdateStatus) -> UpdateTrayPresentation {
-    let (status_label, check_enabled) = match status {
-        UpdateStatus::Idle => ("更新：尚未检查".to_string(), true),
-        UpdateStatus::Checking { .. } => ("更新：正在检查".to_string(), false),
-        UpdateStatus::UpToDate => ("更新：已是最新".to_string(), true),
-        UpdateStatus::Available { version, .. } => (format!("更新：发现 {version}"), true),
-        UpdateStatus::Downloading { version, .. } => (format!("更新：正在下载 {version}"), false),
-        UpdateStatus::Installing { version } => (format!("更新：正在安装 {version}"), false),
-        UpdateStatus::Failed { .. } => ("更新：检查失败".to_string(), true),
-    };
-    UpdateTrayPresentation {
-        status_label,
-        check_enabled,
-    }
-}
-
 pub fn setup(app: &mut App) -> tauri::Result<()> {
     let runtime_presentation = runtime_presentation(&app.state::<Arc<RuntimeManager>>().status());
     let update_presentation = update_presentation(&app.state::<Arc<UpdateManager>>().status());
@@ -100,7 +77,7 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
     let update_status_item = MenuItem::with_id(
         app,
         UPDATE_STATUS_ID,
-        update_presentation.status_label,
+        update_presentation.tray_status_label,
         false,
         None::<&str>,
     )?;
@@ -115,8 +92,8 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
     let check_update_item = MenuItem::with_id(
         app,
         CHECK_UPDATE_ID,
-        "检查更新",
-        update_presentation.check_enabled,
+        update_presentation.action_label,
+        update_presentation.action_enabled,
         None::<&str>,
     )?;
     let quit_item = MenuItem::with_id(app, QUIT_ID, "退出", true, None::<&str>)?;
@@ -194,10 +171,13 @@ pub fn update_updater_status(app: &AppHandle) {
         return;
     };
     let presentation = update_presentation(&manager.status());
-    let _ = tray.update_status_item.set_text(presentation.status_label);
+    let _ = tray
+        .update_status_item
+        .set_text(presentation.tray_status_label);
+    let _ = tray.check_update_item.set_text(presentation.action_label);
     let _ = tray
         .check_update_item
-        .set_enabled(presentation.check_enabled);
+        .set_enabled(presentation.action_enabled);
 }
 
 pub fn show_main_window(app: &AppHandle) {

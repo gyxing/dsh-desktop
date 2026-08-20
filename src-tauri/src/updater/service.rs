@@ -1,19 +1,24 @@
-use std::{fmt::Display, sync::Arc, time::Duration};
+use std::{
+    fmt::Display,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use tauri::{AppHandle, Manager};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_updater::UpdaterExt;
-use tokio::sync::oneshot;
 
 use crate::{desktop::lifecycle::AppLifecycle, runtime::manager::RuntimeManager};
 
 use super::{
+    dialog::{confirm_install, show_error, show_info},
+    download::{download_with_resume, DownloadError},
     manager::UpdateManager,
+    signature::verify_signature,
     status::{UpdateCheckSource, UpdateStatus},
 };
 
 const AUTOMATIC_CHECK_DELAY: Duration = Duration::from_secs(30);
-const MAX_RELEASE_NOTES_CHARS: usize = 2_000;
+const PROGRESS_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
 
 /// 延迟检查一次更新，避免阻塞 DSH 启动和页面加载。
 pub fn spawn_automatic_check(app: AppHandle) {
@@ -40,7 +45,7 @@ async fn run_check(app: AppHandle, source: UpdateCheckSource) {
         }
         return;
     };
-    crate::desktop::tray::update_updater_status(&app);
+    refresh_update_surfaces(&app);
 
     let updater = match app.updater() {
         Ok(updater) => updater,
@@ -79,6 +84,20 @@ async fn run_check(app: AppHandle, source: UpdateCheckSource) {
         return;
     }
 
+    let public_key = match updater_public_key(&app) {
+        Ok(public_key) => public_key,
+        Err(error) => {
+            handle_download_failure(&app, &manager, source, &error);
+            return;
+        }
+    };
+    let progress_app = app.clone();
+    let progress_manager = manager.clone();
+    let progress_version = version.clone();
+    let retry_app = app.clone();
+    let retry_manager = manager.clone();
+    let retry_version = version.clone();
+    let mut last_refresh = None::<Instant>;
     set_status(
         &app,
         &manager,
@@ -88,31 +107,60 @@ async fn run_check(app: AppHandle, source: UpdateCheckSource) {
             total: None,
         },
     );
-    let progress_app = app.clone();
-    let progress_manager = manager.clone();
-    let progress_version = version.clone();
-    let mut downloaded = 0_u64;
-    let bytes = match update
-        .download(
-            move |chunk, total| {
-                downloaded += chunk as u64;
-                progress_manager.set_status(UpdateStatus::Downloading {
-                    version: progress_version.clone(),
-                    downloaded,
-                    total,
-                });
-                crate::desktop::tray::update_updater_status(&progress_app);
-            },
-            || {},
-        )
-        .await
+    let bytes = match download_with_resume(
+        &update,
+        move |downloaded, total| {
+            progress_manager.set_status(UpdateStatus::Downloading {
+                version: progress_version.clone(),
+                downloaded,
+                total,
+            });
+            let completed = total.is_some_and(|total| total > 0 && downloaded >= total);
+            let should_refresh = last_refresh
+                .map(|last| last.elapsed() >= PROGRESS_REFRESH_INTERVAL)
+                .unwrap_or(true)
+                || completed;
+            if should_refresh {
+                last_refresh = Some(Instant::now());
+                refresh_update_surfaces(&progress_app);
+            }
+        },
+        move |downloaded, total, next_attempt, max_attempts, error| {
+            retry_manager.set_status(UpdateStatus::Retrying {
+                version: retry_version.clone(),
+                downloaded,
+                total,
+                next_attempt,
+                max_attempts,
+            });
+            refresh_update_surfaces(&retry_app);
+            retry_app
+                .state::<Arc<RuntimeManager>>()
+                .record_system_diagnostic(&format!(
+                    "更新包连接中断，将从 {downloaded} 字节续传（第{next_attempt}/{max_attempts}次）：{error}"
+                ));
+        },
+    )
+    .await
     {
         Ok(bytes) => bytes,
         Err(error) => {
-            handle_failure(&app, &manager, source, "下载或验签更新失败", &error);
+            handle_download_failure(&app, &manager, source, &error);
             return;
         }
     };
+
+    set_status(
+        &app,
+        &manager,
+        UpdateStatus::Verifying {
+            version: version.clone(),
+        },
+    );
+    if let Err(error) = verify_signature(&bytes, &update.signature, &public_key) {
+        handle_download_failure(&app, &manager, source, &error);
+        return;
+    }
 
     set_status(
         &app,
@@ -151,63 +199,54 @@ async fn run_check(app: AppHandle, source: UpdateCheckSource) {
 
 fn set_status(app: &AppHandle, manager: &UpdateManager, status: UpdateStatus) {
     manager.set_status(status);
+    refresh_update_surfaces(app);
+}
+
+fn refresh_update_surfaces(app: &AppHandle) {
     crate::desktop::tray::update_updater_status(app);
+    crate::app::update_main_window_presentation(app);
 }
 
-/// 限制原生对话框中的更新说明长度，避免超长 Release 内容遮挡操作按钮。
-fn format_release_notes(notes: Option<&str>) -> String {
-    let notes = notes.unwrap_or_default().trim();
-    if notes.is_empty() {
-        return "此版本未提供更新说明。".to_string();
-    }
-    let mut chars = notes.chars();
-    let mut result = chars
-        .by_ref()
-        .take(MAX_RELEASE_NOTES_CHARS)
-        .collect::<String>();
-    if chars.next().is_some() {
-        result.push_str("……");
-    }
-    result
+fn updater_public_key(app: &AppHandle) -> Result<String, DownloadError> {
+    app.config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|config| config.get("pubkey"))
+        .and_then(|value| value.as_str())
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| DownloadError::Configuration("缺少updater.pubkey".to_string()))
 }
 
-/// 等待原生对话框结果，确保用户明确同意后才开始下载完整更新包。
-async fn confirm_install(app: &AppHandle, version: &str, notes: Option<&str>) -> bool {
-    let message = format!(
-        "发现 DSH Desktop {version}。\n\n{}\n\n更新将下载完整安装包，并在验签后重新启动应用。",
-        format_release_notes(notes)
+/// 下载已由用户确认，因此失败时始终给出明确的恢复建议并保留原始诊断。
+fn handle_download_failure(
+    app: &AppHandle,
+    manager: &UpdateManager,
+    source: UpdateCheckSource,
+    error: &DownloadError,
+) {
+    let technical_message = error.to_string();
+    let user_message = if error.is_retryable() {
+        "更新包多次续传后仍未完成。请检查网络或安全软件后重新下载。".to_string()
+    } else {
+        "更新包下载或签名校验失败，请稍后重新下载。".to_string()
+    };
+    set_status(
+        app,
+        manager,
+        UpdateStatus::Failed {
+            source,
+            message: user_message.clone(),
+        },
     );
-    let (sender, receiver) = oneshot::channel();
-    app.dialog()
-        .message(message)
-        .title(format!("发现新版本 {version}"))
-        .kind(MessageDialogKind::Info)
-        .buttons(MessageDialogButtons::OkCancelCustom(
-            "下载并安装".into(),
-            "稍后".into(),
-        ))
-        .show(move |accepted| {
-            let _ = sender.send(accepted);
-        });
-    receiver.await.unwrap_or(false)
-}
-
-fn show_info(app: &AppHandle, title: &str, message: &str) {
-    app.dialog()
-        .message(message)
-        .title(title)
-        .kind(MessageDialogKind::Info)
-        .buttons(MessageDialogButtons::Ok)
-        .show(|_| {});
-}
-
-fn show_error(app: &AppHandle, title: &str, message: &str) {
-    app.dialog()
-        .message(message)
-        .title(title)
-        .kind(MessageDialogKind::Error)
-        .buttons(MessageDialogButtons::Ok)
-        .show(|_| {});
+    app.state::<Arc<RuntimeManager>>()
+        .record_system_diagnostic(&format!("{user_message} 技术信息：{technical_message}"));
+    show_error(
+        app,
+        "无法下载更新",
+        &format!("{user_message}\n\n错误详情：{technical_message}"),
+    );
 }
 
 /// 自动检查只写入诊断；手动检查额外弹窗，避免后台网络波动打断用户。
