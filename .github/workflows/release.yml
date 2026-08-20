@@ -202,11 +202,23 @@ jobs:
             $_ -match '\.(exe|dmg|AppImage|deb)$' -and (Test-Path -LiteralPath $_ -PathType Leaf)
           }
           if (-not $packages) { throw '未找到需要生成校验文件的安装包' }
+          $releases = @(gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json)
+          $release = $releases | Where-Object tag_name -eq $env:GITHUB_REF_NAME | Select-Object -First 1
+          if (-not $release) { throw "未找到Draft Release：$env:GITHUB_REF_NAME" }
+          $releaseAssets = @(gh api "repos/$env:GITHUB_REPOSITORY/releases/$($release.id)/assets?per_page=100" | ConvertFrom-Json)
           foreach ($packagePath in $packages) {
             $package = Get-Item -LiteralPath $packagePath
-            $checksumPath = "$($package.FullName).sha256"
             $hash = (Get-FileHash -LiteralPath $package.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            Set-Content -LiteralPath $checksumPath -Value "$hash  $($package.Name)" -Encoding ascii -NoNewline
+            # GitHub会规范化带空格的资产名，校验文件必须记录发布页中的实际名称。
+            $matchedAssets = @($releaseAssets | Where-Object {
+              $_.digest -eq "sha256:$hash" -and $_.size -eq $package.Length
+            })
+            if ($matchedAssets.Count -ne 1) {
+              throw "安装包与GitHub资产匹配异常：$($package.Name)，匹配数量$($matchedAssets.Count)"
+            }
+            $releaseAsset = $matchedAssets[0]
+            $checksumPath = Join-Path $package.DirectoryName "$($releaseAsset.name).sha256"
+            Set-Content -LiteralPath $checksumPath -Value "$hash  $($releaseAsset.name)" -Encoding ascii -NoNewline
             gh release upload $env:GITHUB_REF_NAME $checksumPath --clobber
           }
 
@@ -235,9 +247,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $release = gh release view $env:GITHUB_REF_NAME --json assets,isDraft,isPrerelease | ConvertFrom-Json
-          if (-not $release.isDraft -or $release.isPrerelease) { throw 'Release 必须保持为非预发布 Draft' }
-          $names = @($release.assets | ForEach-Object name)
+          $releases = @(gh api "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" | ConvertFrom-Json)
+          $release = $releases | Where-Object tag_name -eq $env:GITHUB_REF_NAME | Select-Object -First 1
+          if (-not $release -or -not $release.draft -or $release.prerelease) { throw 'Release 必须保持为非预发布 Draft' }
+          $assets = @(gh api "repos/$env:GITHUB_REPOSITORY/releases/$($release.id)/assets?per_page=100" | ConvertFrom-Json)
+          $names = @($assets | ForEach-Object name)
           $requirements = @(
             @{ Label = 'Windows安装包'; Pattern = '\.exe$'; Minimum = 1 },
             @{ Label = 'Windows更新签名'; Pattern = '\.exe\.sig$'; Minimum = 1 },
@@ -254,6 +268,26 @@ jobs:
             $count = @($names | Where-Object { $_ -match $requirement.Pattern }).Count
             if ($count -lt $requirement.Minimum) {
               throw "$($requirement.Label)数量不足：期望至少$($requirement.Minimum)，实际$count"
+            }
+          }
+          # 校验文件内的名称必须能直接匹配用户下载后的GitHub资产名。
+          $packageAssets = @($assets | Where-Object name -match '\.(exe|dmg|AppImage|deb)$')
+          $checksumAssets = @($assets | Where-Object name -match '\.sha256$')
+          if ($checksumAssets.Count -ne $packageAssets.Count) {
+            throw "SHA-256校验文件数量与安装包不一致：安装包$($packageAssets.Count)，校验文件$($checksumAssets.Count)"
+          }
+          foreach ($checksumAsset in $checksumAssets) {
+            gh release download $env:GITHUB_REF_NAME --pattern $checksumAsset.name --dir release-assets --clobber
+            $checksumPath = Join-Path release-assets $checksumAsset.name
+            $parts = (Get-Content -LiteralPath $checksumPath -Raw -Encoding ascii) -split '\s+', 2
+            $packageName = $checksumAsset.name.Substring(0, $checksumAsset.name.Length - '.sha256'.Length)
+            $matchedPackages = @($packageAssets | Where-Object name -eq $packageName)
+            if ($parts.Count -ne 2 -or $matchedPackages.Count -ne 1) {
+              throw "SHA-256校验文件格式或安装包匹配异常：$($checksumAsset.name)"
+            }
+            $expectedHash = $matchedPackages[0].digest -replace '^sha256:', ''
+            if ($parts[0] -ne $expectedHash -or $parts[1].Trim() -ne $packageName) {
+              throw "SHA-256校验文件内容不匹配：$($checksumAsset.name)"
             }
           }
           Write-Output "Draft Release资产校验通过，共$($names.Count)个资产"
