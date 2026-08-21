@@ -1,15 +1,19 @@
 use serde::{Deserialize, Serialize};
-use tauri::{App, AppHandle, Emitter, Manager, Webview, WebviewUrl};
+use tauri::{App, AppHandle, Emitter, Manager, Webview};
 use url::Url;
 
+#[cfg(any(windows, target_os = "linux", test))]
+use tauri::WebviewUrl;
 #[cfg(any(windows, target_os = "linux"))]
 use tauri::{webview::WebviewBuilder, PhysicalPosition, PhysicalSize, Position, Rect, Size};
 
 use crate::updater::{manager::UpdateManager, presentation::update_presentation};
 
 pub const WINDOW_CHROME_LABEL: &str = "window-chrome";
+#[cfg(any(windows, target_os = "linux", test))]
 const CHROME_LOGICAL_HEIGHT: f64 = 36.0;
 
+#[cfg(any(windows, target_os = "linux", test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ChromeLayout {
     pub width: u32,
@@ -36,6 +40,7 @@ pub struct WindowChromeState {
 }
 
 /// 把单行36px标题栏换算成物理像素，并为DSH内容保留剩余区域。
+#[cfg(any(windows, target_os = "linux", test))]
 pub fn calculate_chrome_layout(width: u32, height: u32, scale_factor: f64) -> ChromeLayout {
     let chrome_height = ((CHROME_LOGICAL_HEIGHT * scale_factor).round() as u32).min(height);
     ChromeLayout {
@@ -50,6 +55,7 @@ pub fn is_trusted_chrome_label(label: &str) -> bool {
     label == WINDOW_CHROME_LABEL
 }
 
+#[cfg(any(windows, target_os = "linux", test))]
 pub fn resolve_chrome_url(dev_url: Option<&Url>) -> WebviewUrl {
     match dev_url {
         Some(dev_url) => {
@@ -112,12 +118,17 @@ pub fn setup(app: &mut App) -> tauri::Result<()> {
     Ok(())
 }
 
+#[cfg(any(windows, target_os = "linux"))]
 pub fn resize_to(app: &AppHandle, width: u32, height: u32) {
-    #[cfg(any(windows, target_os = "linux"))]
     if let Some(main) = app.get_webview("main") {
         let scale_factor = main.window().scale_factor().unwrap_or(1.0);
         let _ = apply_layout(app, calculate_chrome_layout(width, height, scale_factor));
     }
+    emit_state(app);
+}
+
+#[cfg(target_os = "macos")]
+pub fn resize_to(app: &AppHandle, _: u32, _: u32) {
     emit_state(app);
 }
 

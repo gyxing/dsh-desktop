@@ -1,3 +1,4 @@
+#[cfg(windows)]
 use std::{
     env,
     fs::{self, OpenOptions},
@@ -7,9 +8,12 @@ use std::{
 };
 
 use serde::Deserialize;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
+#[cfg(windows)]
+use tauri::Manager;
 use thiserror::Error;
 
+#[cfg(windows)]
 use crate::runtime::paths::RuntimePaths;
 
 #[cfg(windows)]
@@ -17,16 +21,21 @@ use std::os::windows::process::CommandExt;
 #[cfg(windows)]
 use windows_sys::Win32::System::Threading::CREATE_NEW_CONSOLE;
 
+#[cfg(windows)]
 const NODE_SHIM: &str = "@echo off\r\n\"%DSH_DESKTOP_NODE%\" %*\r\nexit /b %errorlevel%\r\n";
+#[cfg(windows)]
 const DSH_SHIM: &str = "@echo off\r\n\"%DSH_DESKTOP_NODE%\" \"%DSH_DESKTOP_DSH_ENTRY%\" %*\r\nexit /b %errorlevel%\r\n";
+#[cfg(windows)]
 const PNPM_SHIM: &str = "@echo off\r\n\"%DSH_DESKTOP_NODE%\" \"%DSH_DESKTOP_PNPM_ENTRY%\" %*\r\nexit /b %errorlevel%\r\n";
 
+#[cfg(windows)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PowerShellKind {
     Pwsh,
     WindowsPowerShell,
 }
 
+#[cfg(windows)]
 #[derive(Debug)]
 pub struct PowerShellExecutable {
     pub path: PathBuf,
@@ -35,15 +44,17 @@ pub struct PowerShellExecutable {
 
 #[derive(Debug, Error)]
 pub enum TerminalError {
+    #[cfg(windows)]
     #[error("未找到可用的 PowerShell 7 或 Windows PowerShell 5.1")]
     PowerShellUnavailable,
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
     #[error("未找到可用的系统终端：{0}")]
     SystemTerminalUnavailable(String),
     #[error("无法读取桌面运行时：{0}")]
     Runtime(String),
     #[error("无法读取固定版本信息：{0}")]
     Versions(#[from] serde_json::Error),
+    #[cfg(windows)]
     #[error("无法构造 DSH 终端 PATH：{0}")]
     Path(#[from] std::env::JoinPathsError),
     #[error("无法准备 DSH 终端：{0}")]
@@ -80,6 +91,7 @@ pub fn runtime_versions() -> Result<RuntimeVersions, TerminalError> {
     })
 }
 
+#[cfg(windows)]
 pub fn select_powershell<F>(mut resolve: F) -> Result<PowerShellExecutable, TerminalError>
 where
     F: FnMut(&str) -> Option<PathBuf>,
@@ -100,6 +112,7 @@ where
 }
 
 /// 只生成批处理 shim，避免 PowerShell 执行策略优先命中同名 `.ps1`。
+#[cfg(windows)]
 pub fn write_command_shims(directory: &Path) -> Result<(), TerminalError> {
     fs::create_dir_all(directory)?;
     let metadata = fs::symlink_metadata(directory)?;
@@ -119,6 +132,7 @@ pub fn write_command_shims(directory: &Path) -> Result<(), TerminalError> {
     Ok(())
 }
 
+#[cfg(windows)]
 fn write_if_changed(path: &Path, contents: &str) -> Result<(), std::io::Error> {
     if fs::read_to_string(path).is_ok_and(|existing| existing == contents) {
         return Ok(());
@@ -143,6 +157,7 @@ fn write_if_changed(path: &Path, contents: &str) -> Result<(), std::io::Error> {
     fs::rename(temporary, path)
 }
 
+#[cfg(windows)]
 pub fn powershell_welcome_script(kind: PowerShellKind) -> String {
     let compatibility_notice = match kind {
         PowerShellKind::Pwsh => "PowerShell 7",
@@ -169,6 +184,7 @@ pub fn open_dsh_terminal(app: &AppHandle) -> Result<(), TerminalError> {
     crate::platform::open_external_terminal(app)
 }
 /// 打开独立 PowerShell；只给该子进程注入随包命令，不改变系统或用户配置。
+#[cfg(windows)]
 pub fn open_dsh_powershell(app: &AppHandle) -> Result<(), TerminalError> {
     let runtime = RuntimePaths::resolve(app).map_err(TerminalError::Runtime)?;
     let versions = runtime_versions()?;
@@ -206,6 +222,7 @@ pub fn open_dsh_powershell(app: &AppHandle) -> Result<(), TerminalError> {
     Ok(())
 }
 
+#[cfg(windows)]
 fn resolve_powershell_executable(name: &str) -> Option<PathBuf> {
     for directory in env::split_paths(&env::var_os("PATH").unwrap_or_default()) {
         let candidate = directory.join(name);
@@ -231,13 +248,16 @@ fn resolve_powershell_executable(name: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(windows)]
     use std::{fs, path::PathBuf};
 
+    use super::runtime_versions;
+    #[cfg(windows)]
     use super::{
-        powershell_welcome_script, runtime_versions, select_powershell, write_command_shims,
-        PowerShellKind,
+        powershell_welcome_script, select_powershell, write_command_shims, PowerShellKind,
     };
 
+    #[cfg(windows)]
     fn test_directory(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
             "dsh-desktop-terminal-{name}-{}",
@@ -245,6 +265,7 @@ mod tests {
         ))
     }
 
+    #[cfg(windows)]
     #[test]
     fn terminal_prefers_pwsh_and_falls_back_to_windows_powershell() {
         let pwsh = PathBuf::from(r"C:\Program Files\PowerShell\7\pwsh.exe");
@@ -268,6 +289,7 @@ mod tests {
         assert_eq!(fallback.path, legacy);
     }
 
+    #[cfg(windows)]
     #[test]
     fn terminal_reports_when_no_powershell_is_available() {
         let error = select_powershell(|_| None).expect_err("缺少 PowerShell 时必须失败");
@@ -275,6 +297,7 @@ mod tests {
         assert!(error.to_string().contains("PowerShell"));
     }
 
+    #[cfg(windows)]
     #[test]
     fn terminal_writes_only_cmd_shims_that_use_process_environment_paths() {
         let directory = test_directory("shims");
@@ -309,6 +332,7 @@ mod tests {
         fs::remove_dir_all(directory).expect("应清理测试目录");
     }
 
+    #[cfg(windows)]
     #[test]
     fn windows_powershell_welcome_explicitly_reports_compatibility_mode() {
         let script = powershell_welcome_script(PowerShellKind::WindowsPowerShell);
