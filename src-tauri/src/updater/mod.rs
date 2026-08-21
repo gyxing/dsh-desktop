@@ -1,8 +1,12 @@
-mod dialog;
+mod cache;
+pub(crate) mod dialog;
 mod download;
 pub mod manager;
 pub mod presentation;
+mod progress;
 mod range;
+pub(crate) mod schedule;
 pub mod service;
 mod signature;
 pub mod status;
+mod transfer;

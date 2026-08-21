@@ -10,5 +10,13 @@ export default defineConfig({
     target: 'es2022',
     minify: 'oxc',
     sourcemap: false,
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        about: 'about.html',
+        titlebar: 'titlebar.html',
+        update: 'update.html',
+      },
+    },
   },
 });

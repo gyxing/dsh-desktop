@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 
 const tag =
   process.argv.slice(2).find((argument) => argument !== '--') ?? process.env.GITHUB_REF_NAME;
@@ -27,5 +28,16 @@ const mismatches = Object.entries(versions).filter(([, value]) => value !== expe
 if (mismatches.length > 0) {
   const detail = mismatches.map(([file, value]) => `${file}=${value ?? '<missing>'}`).join(', ');
   throw new Error(`标签 ${tag} 与项目版本 ${expected} 不一致：${detail}`);
+}
+const releaseNotesPath = path.join('release-notes', `${tag}.md`);
+if (!fs.existsSync(releaseNotesPath)) {
+  throw new Error(`缺少版本更新说明：${releaseNotesPath}`);
+}
+const releaseNotes = fs.readFileSync(releaseNotesPath, 'utf8');
+if (!releaseNotes.includes(`DSH Desktop \`${expected}\``)) {
+  throw new Error(`版本更新说明未标记当前版本：${expected}`);
+}
+if (/\b(?:TBD|TODO)\b/u.test(releaseNotes)) {
+  throw new Error(`版本更新说明包含未完成占位内容：${releaseNotesPath}`);
 }
 console.log(`发布版本校验通过：${tag}`);

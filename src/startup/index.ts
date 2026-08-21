@@ -7,7 +7,7 @@ import {
   renderRuntimeStatus,
   type RuntimeStatus,
 } from './runtime-status';
-import './styles.css';
+import './index.css';
 
 const elements = getRuntimeElements();
 

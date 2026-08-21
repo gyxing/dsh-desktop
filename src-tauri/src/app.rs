@@ -7,14 +7,16 @@ use tauri::{
 };
 
 use crate::desktop::{
+    chrome,
     lifecycle::{AppLifecycle, CloseAction},
-    navigation, tray,
+    menu, navigation, tray,
 };
 use crate::runtime::{manager::RuntimeManager, status::RuntimeStatus};
 use crate::updater::{
+    dialog::{UpdateDialogManager, UPDATE_DIALOG_LABEL},
     manager::UpdateManager,
     presentation::{update_presentation, UpdateTaskbarProgress},
-    service::spawn_automatic_check,
+    schedule::spawn_automatic_check,
 };
 
 #[tauri::command]
@@ -38,7 +40,7 @@ pub(crate) fn update_main_window_presentation(app: &AppHandle) {
     let update = app
         .try_state::<Arc<UpdateManager>>()
         .map(|manager| update_presentation(&manager.status()));
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(window) = app.get_window("main") {
         let title = update
             .as_ref()
             .and_then(|presentation| presentation.title_suffix.as_deref())
@@ -61,6 +63,7 @@ pub(crate) fn update_main_window_presentation(app: &AppHandle) {
         };
         let _ = window.set_progress_bar(progress_state);
     }
+    chrome::emit_state(app);
 }
 
 /// 创建并运行 DSH Desktop 的 Tauri 应用。
@@ -74,13 +77,29 @@ pub fn run() {
         .plugin(navigation::init())
         .manage(Arc::new(RuntimeManager::new()))
         .manage(Arc::new(UpdateManager::new()))
+        .manage(Arc::new(UpdateDialogManager::new()))
         .manage(AppLifecycle::new())
         .invoke_handler(tauri::generate_handler![
             runtime_status,
             runtime_diagnostics,
-            restart_runtime
+            restart_runtime,
+            crate::desktop::chrome::window_chrome_state,
+            crate::desktop::chrome::window_chrome_action,
+            crate::desktop::menu::show_chrome_menu,
+            crate::desktop::about::about_dialog_payload,
+            crate::desktop::about::copy_about_info,
+            crate::desktop::about::open_about_website,
+            crate::desktop::about::close_about_dialog,
+            crate::updater::dialog::update_dialog_payload,
+            crate::updater::dialog::respond_update_dialog
         ])
         .on_page_load(|webview, payload| {
+            if webview.label() == chrome::WINDOW_CHROME_LABEL
+                && payload.event() == PageLoadEvent::Finished
+            {
+                chrome::emit_state(webview.app_handle());
+                return;
+            }
             if webview.label() != "main" || payload.event() != PageLoadEvent::Finished {
                 return;
             }
@@ -89,9 +108,20 @@ pub fn run() {
             app.state::<Arc<RuntimeManager>>()
                 .mark_page_ready(app, payload.url());
         })
+        .on_menu_event(|app, event| menu::handle_event(app, event.id().as_ref()))
         .on_window_event(|window, event| {
+            if window.label() == UPDATE_DIALOG_LABEL {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    crate::updater::dialog::dismiss(window.app_handle());
+                }
+                return;
+            }
             if window.label() != "main" {
                 return;
+            }
+            if let WindowEvent::Resized(size) = event {
+                chrome::resize_to(window.app_handle(), size.width, size.height);
             }
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.state::<AppLifecycle>().close_action() == CloseAction::Hide {
@@ -105,6 +135,8 @@ pub fn run() {
             app.handle()
                 .plugin(tauri_plugin_updater::Builder::new().build())?;
             tray::setup(app)?;
+            menu::setup(app)?;
+            chrome::setup(app)?;
             let handle = app.handle().clone();
             let runtime = app.state::<Arc<RuntimeManager>>().inner().clone();
             let _ = runtime.start(&handle);

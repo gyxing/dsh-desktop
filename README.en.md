@@ -18,7 +18,7 @@ DSH Desktop packages the native [DeepSeek Harness](https://github.com/deepseek-a
 ## Pinned Versions
 
 - Node.js: 24.19.0, with official artifacts pinned and SHA-256 verified for Windows x64, macOS ARM64/x64, and Linux x64.
-- `@deepseek-ai/dsh`: 0.1.0-rc.7, locked with pnpm and npm integrity metadata.
+- `@deepseek-ai/dsh`: 0.1.1-rc.2, locked with pnpm and npm integrity metadata.
 - Tauri: 2.11.x, with exact Rust and npm dependency versions.
 
 See `runtime/runtime-lock.json` for the authoritative lock metadata. Each target is deployed on a matching native build host with its own dependency tree and native modules. Windows continues to use a hoisted physical directory so directory junctions are not lost while Tauri copies resources.
@@ -39,13 +39,17 @@ corepack pnpm tauri dev
 
 - Closing the main window hides it while DSH continues running in the background.
 - Clicking the tray icon restores and focuses the main window.
-- The native title bar displays `DSH Desktop <version>` and remains stable after navigation to the DSH page.
-- The tray or menu-bar menu exposes runtime status, update status, the DSH terminal, Harness restart, update checks, and explicit exit.
-- Only the tray Exit command shuts down the desktop shell, Node.js, and the complete DSH process tree.
+- Windows/Linux use a 36px single-row title bar that combines the app icon, `DSH Desktop <version>`, Application/Edit/Update/Help menus, update status, and three window controls. Its light and dark palettes follow the system theme, and it remains visible after navigation to DSH.
+- macOS retains its native title bar and system menu bar. Menu and tray actions share one state and lifecycle on every platform.
+- Help > About DSH Desktop shows the build time, build id, platform architecture, and bundled DSH/Node/pnpm versions, with a copyable public version summary.
+- The tray or title-bar menu exposes runtime status, update status, the DSH terminal, Harness restart, update checks, and explicit exit.
+- Only an explicit Exit command from the tray or title-bar menu shuts down the desktop shell, Node.js, and the complete DSH process tree.
 - The DSH terminal prefers external PowerShell 7 and falls back to Windows PowerShell 5.1 on Windows, uses Terminal.app on macOS, and detects common desktop terminals on Linux.
 - The dedicated terminal exposes the packaged `node`, `dsh`, and `pnpm` only inside its own process and does not modify the system PATH, shell profile, or `DSH_HOME`.
-- The application checks for updates once about 30 seconds after startup, and users can also check manually from the tray. Background failures do not interrupt the main window.
-- When an update is available, the user chooses whether to download it. The sidecar is stopped only after the complete package passes signature verification, then the installer runs in passive mode and restarts the application.
+- The application checks about 30 seconds after startup and every 24 hours while it remains in the tray. Users can also check manually from the tray or native menu.
+- A fixed-size window presents version-specific notes with a scrollable content region. The sidecar stops only after the complete package passes signature verification.
+- Update packages remain in the application's private cache and resume from a validated HTTP Range offset after interruption, 45 seconds without progress, or an application restart.
+- The title and tray show percentage, transferred size, average speed, ETA, and resume attempt. Redacted diagnostics can be copied from the Help menu after a failure.
 - Updates replace only the desktop application and packaged runtime; existing DSH profiles, caches, and credentials are not migrated or rewritten.
 
 The startup page reports process startup, local HTTP probing, and page-loading status. On failure, users can retry or copy redacted in-memory diagnostics; diagnostics are not persisted or uploaded automatically.

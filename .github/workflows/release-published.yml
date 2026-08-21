@@ -1,0 +1,37 @@
+name: Published Release Smoke
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: read
+
+concurrency:
+  group: published-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  updater:
+    name: 校验公开更新入口
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.19.0
+      - name: 校验正式清单和Range下载
+        shell: pwsh
+        run: |
+          $tag = '${{ github.event.release.tag_name }}'
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
+            throw "正式Release标签格式无效：$tag"
+          }
+          $version = $tag.Substring(1)
+          $manifestUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/latest.json?t=$env:GITHUB_RUN_ID"
+          Invoke-WebRequest -Uri $manifestUrl -OutFile latest.json -Headers @{ 'Cache-Control' = 'no-cache' }
+          node scripts/verify-updater-manifest.mjs latest.json --version $version --require windows-x86_64-nsis --require linux-x86_64-appimage --forbid-prefix darwin-
+          node scripts/verify-published-release.mjs --manifest $manifestUrl --version $version --require windows-x86_64-nsis --require linux-x86_64-appimage

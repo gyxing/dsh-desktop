@@ -46,3 +46,13 @@ pub fn show_native_error(app: &AppHandle, title: &str, message: &str) {
         .buttons(MessageDialogButtons::Ok)
         .show(|_| {});
 }
+
+/// 使用已有Tauri对话框插件展示跨平台原生信息。
+pub fn show_native_info(app: &AppHandle, title: &str, message: &str) {
+    app.dialog()
+        .message(message)
+        .title(title)
+        .kind(MessageDialogKind::Info)
+        .buttons(MessageDialogButtons::Ok)
+        .show(|_| {});
+}

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>关于 DSH Desktop</title>
+  </head>
+  <body class="about-shell">
+    <main class="about-dialog" aria-labelledby="about-title">
+      <header class="about-header">
+        <img
+          class="about-icon"
+          src="./src-tauri/icons/128x128.png"
+          alt="DSH Desktop"
+          draggable="false"
+        />
+        <div class="about-heading">
+          <p class="about-kicker">DSH DESKTOP</p>
+          <h1 id="about-title" class="about-title">正在读取版本信息</h1>
+          <p id="about-description" class="about-description">请稍候…</p>
+        </div>
+        <span id="about-disclaimer" class="about-disclaimer"></span>
+      </header>
+
+      <section id="about-details" class="about-details" aria-label="版本详情"></section>
+
+      <footer class="about-footer">
+        <div class="about-meta">
+          <span id="about-copyright"></span>
+          <span id="about-feedback" role="status" aria-live="polite"></span>
+        </div>
+        <div class="about-actions">
+          <button id="about-copy" class="about-button about-button-secondary" type="button">
+            复制版本信息
+          </button>
+          <button id="about-website" class="about-button about-button-secondary" type="button">
+            打开 GitHub
+          </button>
+          <button id="about-close" class="about-button about-button-primary" type="button">
+            确定
+          </button>
+        </div>
+      </footer>
+    </main>
+    <script type="module" src="/src/windows/about/index.ts"></script>
+  </body>
+</html>

@@ -50,6 +50,27 @@ fn is_loopback_host(host: Option<&str>) -> bool {
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::<R>::new("navigation-policy")
         .on_navigation(|webview, target| {
+            if webview.label() == crate::desktop::about::ABOUT_DIALOG_LABEL {
+                let shell_url = resolve_shell_url(webview.app_handle());
+                return crate::desktop::about::is_about_dialog_navigation_allowed(
+                    target,
+                    shell_url.as_ref(),
+                );
+            }
+            if webview.label() == crate::desktop::chrome::WINDOW_CHROME_LABEL {
+                let shell_url = resolve_shell_url(webview.app_handle());
+                return crate::desktop::chrome::is_chrome_navigation_allowed(
+                    target,
+                    shell_url.as_ref(),
+                );
+            }
+            if webview.label() == crate::updater::dialog::UPDATE_DIALOG_LABEL {
+                let shell_url = resolve_shell_url(webview.app_handle());
+                return crate::updater::dialog::is_update_dialog_navigation_allowed(
+                    target,
+                    shell_url.as_ref(),
+                );
+            }
             if webview.label() != "main" {
                 return false;
             }
@@ -82,7 +103,10 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 }
 
 #[allow(deprecated)]
-fn open_external<R: Runtime>(app: &tauri::AppHandle<R>, target: &Url) -> Result<(), String> {
+pub(crate) fn open_external<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    target: &Url,
+) -> Result<(), String> {
     app.shell()
         .open(target.as_str(), None)
         .map_err(|error| error.to_string())

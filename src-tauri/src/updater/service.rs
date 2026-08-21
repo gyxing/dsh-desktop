@@ -13,31 +13,16 @@ use super::{
     dialog::{confirm_install, show_error, show_info},
     download::{download_with_resume, DownloadError},
     manager::UpdateManager,
-    signature::verify_signature,
+    progress::calculate_transfer_measurement,
+    signature::verify_signature_file,
     status::{UpdateCheckSource, UpdateStatus},
 };
 
-const AUTOMATIC_CHECK_DELAY: Duration = Duration::from_secs(30);
+const UPDATE_CHECK_TIMEOUT: Duration = Duration::from_secs(30);
 const PROGRESS_REFRESH_INTERVAL: Duration = Duration::from_millis(250);
 
-/// 延迟检查一次更新，避免阻塞 DSH 启动和页面加载。
-pub fn spawn_automatic_check(app: AppHandle) {
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(AUTOMATIC_CHECK_DELAY).await;
-        run_check(app, UpdateCheckSource::Automatic).await;
-    });
-}
-
-/// 立即执行用户从托盘发起的更新检查。
-pub fn spawn_manual_check(app: &AppHandle) {
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        run_check(app, UpdateCheckSource::Manual).await;
-    });
-}
-
 /// 串行完成检查、用户确认、验签下载和安装，所有失败路径都保留可恢复状态。
-async fn run_check(app: AppHandle, source: UpdateCheckSource) {
+pub(super) async fn run_check(app: AppHandle, source: UpdateCheckSource) {
     let manager = app.state::<Arc<UpdateManager>>().inner().clone();
     let Some(_guard) = manager.try_begin(source) else {
         if source == UpdateCheckSource::Manual {
@@ -54,10 +39,20 @@ async fn run_check(app: AppHandle, source: UpdateCheckSource) {
             return;
         }
     };
-    let update = match updater.check().await {
-        Ok(update) => update,
-        Err(error) => {
+    let update = match tokio::time::timeout(UPDATE_CHECK_TIMEOUT, updater.check()).await {
+        Ok(Ok(update)) => update,
+        Ok(Err(error)) => {
             handle_failure(&app, &manager, source, "检查更新失败", &error);
+            return;
+        }
+        Err(_) => {
+            handle_failure(
+                &app,
+                &manager,
+                source,
+                "检查更新失败",
+                &"连接更新服务器超时",
+            );
             return;
         }
     };
@@ -98,6 +93,8 @@ async fn run_check(app: AppHandle, source: UpdateCheckSource) {
     let retry_manager = manager.clone();
     let retry_version = version.clone();
     let mut last_refresh = None::<Instant>;
+    let mut progress_initial_bytes = None::<u64>;
+    let mut progress_started_at = None::<Instant>;
     set_status(
         &app,
         &manager,
@@ -105,15 +102,28 @@ async fn run_check(app: AppHandle, source: UpdateCheckSource) {
             version: version.clone(),
             downloaded: 0,
             total: None,
+            bytes_per_second: None,
+            eta_seconds: None,
         },
     );
-    let bytes = match download_with_resume(
+    let downloaded_update = match download_with_resume(
+        &app,
         &update,
         move |downloaded, total| {
+            let initial_bytes = *progress_initial_bytes.get_or_insert(downloaded);
+            let started_at = *progress_started_at.get_or_insert_with(Instant::now);
+            let measurement = calculate_transfer_measurement(
+                initial_bytes,
+                downloaded,
+                total,
+                started_at.elapsed(),
+            );
             progress_manager.set_status(UpdateStatus::Downloading {
                 version: progress_version.clone(),
                 downloaded,
                 total,
+                bytes_per_second: measurement.bytes_per_second,
+                eta_seconds: measurement.eta_seconds,
             });
             let completed = total.is_some_and(|total| total > 0 && downloaded >= total);
             let should_refresh = last_refresh
@@ -130,6 +140,8 @@ async fn run_check(app: AppHandle, source: UpdateCheckSource) {
                 version: retry_version.clone(),
                 downloaded,
                 total,
+                bytes_per_second: None,
+                eta_seconds: None,
                 next_attempt,
                 max_attempts,
             });
@@ -143,7 +155,7 @@ async fn run_check(app: AppHandle, source: UpdateCheckSource) {
     )
     .await
     {
-        Ok(bytes) => bytes,
+        Ok(downloaded_update) => downloaded_update,
         Err(error) => {
             handle_download_failure(&app, &manager, source, &error);
             return;
@@ -157,10 +169,21 @@ async fn run_check(app: AppHandle, source: UpdateCheckSource) {
             version: version.clone(),
         },
     );
-    if let Err(error) = verify_signature(&bytes, &update.signature, &public_key) {
+    if let Err(error) =
+        verify_signature_file(downloaded_update.path(), &update.signature, &public_key)
+    {
+        let _ = downloaded_update.clear();
         handle_download_failure(&app, &manager, source, &error);
         return;
     }
+
+    let bytes = match downloaded_update.read_for_install().await {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            handle_download_failure(&app, &manager, source, &error);
+            return;
+        }
+    };
 
     set_status(
         &app,
@@ -172,8 +195,9 @@ async fn run_check(app: AppHandle, source: UpdateCheckSource) {
     // 只有签名校验完成后才停止 Sidecar，避免下载或验签失败影响现有会话。
     let runtime = app.state::<Arc<RuntimeManager>>().inner().clone();
     runtime.stop();
-    match update.install(bytes) {
+    match update.install(&bytes) {
         Ok(()) => {
+            let _ = downloaded_update.clear();
             app.state::<AppLifecycle>().request_quit();
             app.request_restart();
         }
@@ -204,6 +228,7 @@ fn set_status(app: &AppHandle, manager: &UpdateManager, status: UpdateStatus) {
 
 fn refresh_update_surfaces(app: &AppHandle) {
     crate::desktop::tray::update_updater_status(app);
+    crate::desktop::menu::update_updater_status(app);
     crate::app::update_main_window_presentation(app);
 }
 
@@ -245,7 +270,9 @@ fn handle_download_failure(
     show_error(
         app,
         "无法下载更新",
-        &format!("{user_message}\n\n错误详情：{technical_message}"),
+        &format!(
+            "{user_message}\n\n错误详情：{technical_message}\n\n可从顶部“帮助 > 复制诊断信息”复制脱敏诊断。"
+        ),
     );
 }
 

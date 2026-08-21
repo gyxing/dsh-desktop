@@ -1,0 +1,185 @@
+:root {
+  color-scheme: light dark;
+  font-family: 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  font-synthesis: none;
+
+  --chrome-background: #edf3f8;
+  --chrome-foreground: #172033;
+  --chrome-hover: #dee8f1;
+  --chrome-active: #cfdde9;
+  --chrome-border: #d4dfe9;
+  --chrome-close-hover: #c42b1c;
+  --chrome-close-foreground: #fff;
+  --chrome-focus: #3158d5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chrome-background: #1e293b;
+    --chrome-foreground: #f8fafc;
+    --chrome-hover: rgb(255 255 255 / 10%);
+    --chrome-active: rgb(255 255 255 / 16%);
+    --chrome-border: #334155;
+    --chrome-focus: #9bb7ff;
+  }
+}
+
+.chrome-shell {
+  margin: 0;
+  overflow: hidden;
+  color: var(--chrome-foreground);
+  background: var(--chrome-background);
+  user-select: none;
+}
+
+.chrome-bar {
+  display: flex;
+  box-sizing: border-box;
+  width: 100vw;
+  height: 36px;
+  align-items: stretch;
+  overflow: hidden;
+  background: var(--chrome-background);
+  border-bottom: 1px solid var(--chrome-border);
+}
+
+.chrome-brand,
+.chrome-menu,
+.chrome-status,
+.chrome-window-controls {
+  display: flex;
+  align-items: center;
+}
+
+.chrome-brand {
+  flex: 0 0 auto;
+  min-width: 170px;
+  padding: 0 10px;
+  gap: 8px;
+}
+
+.chrome-brand-icon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
+.chrome-brand-title {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 36px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chrome-menu {
+  flex: 0 0 auto;
+  height: 36px;
+}
+
+.chrome-menu-button,
+.chrome-window-button {
+  height: 36px;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  cursor: default;
+}
+
+.chrome-menu-button {
+  min-width: 44px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.chrome-window-button {
+  display: grid;
+  width: 46px;
+  place-items: center;
+}
+
+.chrome-window-button svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+  stroke-width: 0.65;
+}
+
+.chrome-menu-button:hover,
+.chrome-window-button:hover {
+  background: var(--chrome-hover);
+}
+
+.chrome-menu-button:active,
+.chrome-window-button:active {
+  background: var(--chrome-active);
+}
+
+.chrome-menu-button:focus-visible,
+.chrome-window-button:focus-visible {
+  outline: 2px solid var(--chrome-focus);
+  outline-offset: -3px;
+}
+
+.chrome-status {
+  min-width: 0;
+  flex: 1 1 auto;
+  justify-content: center;
+  padding: 0 12px;
+}
+
+.chrome-status-text {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 36px;
+  opacity: 0.92;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chrome-drag-region {
+  cursor: default;
+}
+
+.chrome-window-controls {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.chrome-window-close:hover,
+.chrome-window-close:active {
+  color: var(--chrome-close-foreground);
+  background: var(--chrome-close-hover);
+}
+
+.chrome-restore-icon,
+.chrome-window-button[data-maximized='true'] .chrome-maximize-icon {
+  display: none;
+}
+
+.chrome-window-button[data-maximized='true'] .chrome-restore-icon {
+  display: block;
+}
+
+@media (width <= 980px) {
+  .chrome-brand {
+    min-width: 150px;
+  }
+
+  .chrome-status {
+    justify-content: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chrome-menu-button,
+  .chrome-window-button {
+    transition: none;
+  }
+}

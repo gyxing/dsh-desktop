@@ -351,12 +351,13 @@ fn terminate_resources(child: Option<ManagedChild>, process_tree: Option<Process
 }
 fn emit_status(app: &AppHandle, status: RuntimeStatus) {
     crate::desktop::tray::update_runtime_status(app, &status);
+    crate::desktop::menu::update_runtime_status(app, &status);
     let _ = app.emit("runtime://status", status);
 }
 
 fn navigate_if_present(app: &AppHandle, url: Option<Url>) {
-    if let (Some(window), Some(url)) = (app.get_webview_window("main"), url) {
-        let _ = window.navigate(url);
+    if let (Some(webview), Some(url)) = (app.get_webview("main"), url) {
+        let _ = webview.navigate(url);
     }
 }
 

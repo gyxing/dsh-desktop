@@ -116,10 +116,10 @@ fn handle_stdout(
             return;
         }
         let navigation = probe_app
-            .get_webview_window("main")
+            .get_webview("main")
             .ok_or_else(|| "主窗口不存在".to_string())
-            .and_then(|window| {
-                window
+            .and_then(|webview| {
+                webview
                     .navigate(url)
                     .map_err(|error| format!("无法打开 DSH Web 界面：{error}"))
             });

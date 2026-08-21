@@ -1,0 +1,220 @@
+:root {
+  color-scheme: light dark;
+  font-family: 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  font-synthesis: none;
+
+  --about-background: #f4f7fc;
+  --about-surface: #fff;
+  --about-text: #162033;
+  --about-muted: #5f6c80;
+  --about-border: #d9e1ed;
+  --about-primary: #3158d5;
+  --about-primary-hover: #2749b8;
+  --about-primary-soft: rgb(49 88 213 / 10%);
+  --about-focus: #163cae;
+}
+
+.about-shell {
+  margin: 0;
+  overflow: hidden;
+  color: var(--about-text);
+  background: var(--about-background);
+}
+
+.about-dialog {
+  display: grid;
+  box-sizing: border-box;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: 100vw;
+  height: 100vh;
+  padding: 20px;
+  gap: 14px;
+}
+
+.about-header {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.about-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgb(49 88 213 / 18%);
+}
+
+.about-heading {
+  min-width: 0;
+}
+
+.about-kicker {
+  margin: 0;
+  color: var(--about-primary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.about-title {
+  margin: 2px 0 0;
+  font-size: 20px;
+  line-height: 1.3;
+}
+
+.about-description {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--about-muted);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.about-disclaimer {
+  min-height: 24px;
+  padding: 0 10px;
+  color: var(--about-primary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 24px;
+  background: var(--about-primary-soft);
+  border-radius: 999px;
+}
+
+.about-details {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.about-card {
+  min-width: 0;
+  padding: 14px;
+  background: var(--about-surface);
+  border: 1px solid var(--about-border);
+  border-radius: 10px;
+}
+
+.about-card-title {
+  margin: 0 0 10px;
+  color: var(--about-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.about-list {
+  display: grid;
+  margin: 0;
+  gap: 8px;
+}
+
+.about-row {
+  display: grid;
+  grid-template-columns: minmax(64px, auto) minmax(0, 1fr);
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.about-row-label {
+  color: var(--about-muted);
+}
+
+.about-row-value {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.about-footer {
+  display: flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.about-meta {
+  display: grid;
+  min-width: 0;
+  color: var(--about-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.about-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.about-button {
+  min-width: 72px;
+  height: 34px;
+  padding: 0 12px;
+  color: var(--about-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--about-surface);
+  border: 1px solid var(--about-border);
+  border-radius: 7px;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.about-button-primary {
+  color: #fff;
+  background: var(--about-primary);
+  border-color: var(--about-primary);
+}
+
+.about-button:focus-visible {
+  outline: 3px solid var(--about-focus);
+  outline-offset: 2px;
+}
+
+.about-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.about-button:hover:not(:disabled) {
+  background: var(--about-primary-soft);
+  border-color: var(--about-primary);
+}
+
+.about-button-primary:hover:not(:disabled) {
+  background: var(--about-primary-hover);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --about-background: #111724;
+    --about-surface: #192131;
+    --about-text: #f4f7fc;
+    --about-muted: #b6c0d0;
+    --about-border: #344055;
+    --about-primary: #7f9af6;
+    --about-primary-hover: #9aaff8;
+    --about-primary-soft: rgb(127 154 246 / 14%);
+    --about-focus: #adc0ff;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about-button {
+    transition: none;
+  }
+}

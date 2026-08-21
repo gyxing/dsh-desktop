@@ -1,6 +1,6 @@
 {
   "name": "dsh-desktop",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.22.0",
@@ -8,6 +8,7 @@
     "dev": "vite --host 127.0.0.1 --port 1420",
     "build": "tsc --noEmit && vite build",
     "lint": "eslint . && stylelint \"src/**/*.css\"",
+    "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
     "format:check": "prettier --check .",
     "runtime:stage": "node scripts/stage-runtime.mjs",
     "runtime:verify": "node scripts/verify-runtime.mjs",
@@ -15,9 +16,11 @@
     "release:verify": "node scripts/verify-release-version.mjs",
     "release:verify-updater": "node scripts/verify-updater-manifest.mjs",
     "resources:measure": "pwsh.exe -NoProfile -File scripts/measure-resources.ps1",
+    "typecheck:tests": "tsc --noEmit -p tsconfig.tests.json",
+    "test:scripts": "node --test scripts/supply-chain-policy.test.mjs scripts/verify-published-release.test.mjs src/windows/about/content.test.ts src/windows/update/content.test.ts",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
-    "check": "pnpm runtime:verify && pnpm lint && pnpm format:check && pnpm format:rust && pnpm build && pnpm test:rust && cargo check --manifest-path src-tauri/Cargo.toml",
+    "check": "pnpm runtime:verify && pnpm lint && pnpm lint:rust && pnpm format:check && pnpm format:rust && pnpm build && pnpm typecheck:tests && pnpm test:scripts && pnpm test:rust && cargo check --manifest-path src-tauri/Cargo.toml",
     "tauri": "tauri",
     "tauri:dev": "pnpm runtime:stage && tauri dev",
     "tauri:build": "pnpm runtime:stage && tauri build --bundles nsis"
@@ -28,6 +31,7 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@tauri-apps/cli": "2.11.4",
+    "@types/node": "24.13.3",
     "eslint": "10.8.1",
     "pnpm": "11.22.0",
     "prettier": "3.9.6",

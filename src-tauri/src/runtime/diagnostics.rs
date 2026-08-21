@@ -102,9 +102,24 @@ fn redact_message(message: &str) -> String {
 
 fn redact_line(line: &str) -> String {
     let lowercase = line.to_ascii_lowercase();
-    let contains_secret_name = ["authorization", "api_key", "apikey", "token"]
-        .iter()
-        .any(|name| lowercase.contains(name));
+    let contains_secret_name = [
+        "authorization",
+        "api_key",
+        "api-key",
+        "apikey",
+        "access_token",
+        "refresh_token",
+        "id_token",
+        "token",
+        "password",
+        "passwd",
+        "secret",
+        "cookie",
+        "credential",
+        "bearer ",
+    ]
+    .iter()
+    .any(|name| lowercase.contains(name));
 
     if contains_secret_name {
         if let Some(separator) = line.find([':', '=']) {
@@ -121,17 +136,23 @@ fn redact_line(line: &str) -> String {
 }
 
 fn redact_sk_tokens(line: &str) -> String {
-    let mut redacted = String::new();
-    for word in line.split_whitespace() {
-        if !redacted.is_empty() {
-            redacted.push(' ');
-        }
-        if word.starts_with("sk-") {
-            redacted.push_str("[已脱敏]");
-        } else {
-            redacted.push_str(word);
-        }
+    let mut remaining = line;
+    let mut redacted = String::with_capacity(line.len());
+    while let Some(offset) = remaining.to_ascii_lowercase().find("sk-") {
+        redacted.push_str(&remaining[..offset]);
+        let token = &remaining[offset..];
+        let token_end = token
+            .char_indices()
+            .find(|(_, character)| {
+                character.is_whitespace()
+                    || matches!(character, '"' | '\'' | ',' | ';' | '&' | ')' | ']')
+            })
+            .map(|(index, _)| index)
+            .unwrap_or(token.len());
+        redacted.push_str("[已脱敏]");
+        remaining = &token[token_end..];
     }
+    redacted.push_str(remaining);
     redacted
 }
 
@@ -166,6 +187,32 @@ mod tests {
         assert!(!snapshot.contains("secret-value"));
         assert!(!snapshot.contains("sk-private-value"));
         assert!(!snapshot.contains("token-value"));
+        assert!(snapshot.contains("[已脱敏]"));
+    }
+
+    #[test]
+    fn diagnostics_redact_password_cookie_bearer_and_embedded_sk_tokens() {
+        let mut diagnostics = DiagnosticBuffer::new(10, 4096);
+
+        diagnostics.push(
+            8,
+            DiagnosticSource::Stderr,
+            "password=plain-secret\nCookie: session=private-cookie\nrequest Bearer bearer-value\nmodel-key=prefix-SK-private-value,suffix",
+        );
+
+        let snapshot = diagnostics.snapshot();
+        let lowercase_snapshot = snapshot.to_ascii_lowercase();
+        for secret in [
+            "plain-secret",
+            "private-cookie",
+            "bearer-value",
+            "sk-private-value",
+        ] {
+            assert!(
+                !lowercase_snapshot.contains(secret),
+                "诊断中不应保留 {secret}"
+            );
+        }
         assert!(snapshot.contains("[已脱敏]"));
     }
 

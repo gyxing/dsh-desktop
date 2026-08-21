@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DSH Desktop</title>
+  </head>
+  <body class="chrome-shell">
+    <header class="chrome-bar">
+      <div class="chrome-brand chrome-drag-region" data-chrome-drag>
+        <img class="chrome-brand-icon" src="./src-tauri/icons/32x32.png" alt="" draggable="false" />
+        <span id="chrome-title" class="chrome-brand-title">DSH Desktop</span>
+      </div>
+
+      <nav class="chrome-menu" role="menubar" aria-label="应用菜单">
+        <button class="chrome-menu-button" type="button" role="menuitem" data-menu="application">
+          应用
+        </button>
+        <button class="chrome-menu-button" type="button" role="menuitem" data-menu="edit">
+          编辑
+        </button>
+        <button class="chrome-menu-button" type="button" role="menuitem" data-menu="update">
+          更新
+        </button>
+        <button class="chrome-menu-button" type="button" role="menuitem" data-menu="help">
+          帮助
+        </button>
+      </nav>
+
+      <div class="chrome-status chrome-drag-region" data-chrome-drag>
+        <span
+          id="chrome-status-text"
+          class="chrome-status-text"
+          role="status"
+          aria-live="polite"
+        ></span>
+      </div>
+
+      <div class="chrome-window-controls" aria-label="窗口控制">
+        <button
+          class="chrome-window-button"
+          type="button"
+          data-window-action="minimize"
+          aria-label="最小化"
+          title="最小化"
+        >
+          <svg viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M2 6.5h8" />
+          </svg>
+        </button>
+        <button
+          id="chrome-maximize"
+          class="chrome-window-button"
+          type="button"
+          data-window-action="toggleMaximize"
+          aria-label="最大化"
+          title="最大化"
+        >
+          <svg class="chrome-maximize-icon" viewBox="0 0 12 12" aria-hidden="true">
+            <rect x="2.5" y="2.5" width="7" height="7" />
+          </svg>
+          <svg class="chrome-restore-icon" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M4 3h5v5M3 4h5v5H3z" />
+          </svg>
+        </button>
+        <button
+          class="chrome-window-button chrome-window-close"
+          type="button"
+          data-window-action="close"
+          aria-label="关闭到托盘"
+          title="关闭到托盘"
+        >
+          <svg viewBox="0 0 12 12" aria-hidden="true">
+            <path d="m2.5 2.5 7 7m0-7-7 7" />
+          </svg>
+        </button>
+      </div>
+    </header>
+    <script type="module" src="/src/windows/titlebar/index.ts"></script>
+  </body>
+</html>

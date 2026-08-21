@@ -159,7 +159,7 @@ Write-Host ('Node: {{0}}' -f $env:DSH_DESKTOP_NODE_VERSION)
 Write-Host ('DSH: {{0}}' -f $env:DSH_DESKTOP_DSH_VERSION)
 Write-Host ('pnpm: {{0}}' -f $env:DSH_DESKTOP_PNPM_VERSION)
 Write-Host ('Working directory: {{0}}' -f $env:DSH_DESKTOP_WORKING_DIRECTORY)
-Write-Host 'Commands: dsh --dump-config | dsh plugin --help | pnpm --version'
+Write-Host 'Commands: dsh --profile web --dump-config | dsh plugin --profile web --help | pnpm --version'
 "#,
     )
 }
@@ -316,6 +316,8 @@ mod tests {
         assert!(script.contains("Windows PowerShell 5.1 兼容模式"));
         assert!(script.contains("DSH_DESKTOP_SHIM_DIR"));
         assert!(script.contains("DSH_DESKTOP_WORKING_DIRECTORY"));
+        assert!(script.contains("dsh --profile web --dump-config"));
+        assert!(script.contains("dsh plugin --profile web --help"));
     }
 
     #[test]
@@ -323,7 +325,7 @@ mod tests {
         let versions = runtime_versions().expect("运行时锁应能解析");
 
         assert_eq!(versions.node, "24.19.0");
-        assert_eq!(versions.dsh, "0.1.0-rc.7");
+        assert_eq!(versions.dsh, "0.1.1-rc.2");
         assert_eq!(versions.pnpm, "11.22.0");
     }
 }

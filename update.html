@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>DSH Desktop 更新</title>
+  </head>
+  <body class="update-shell">
+    <main class="update-dialog" aria-labelledby="update-title">
+      <header class="update-header">
+        <span class="update-mark" aria-hidden="true">DSH</span>
+        <span class="update-kicker">DSH DESKTOP UPDATE</span>
+        <h1 id="update-title" class="update-title">正在读取更新内容</h1>
+        <p id="update-description" class="update-description">请稍候…</p>
+      </header>
+
+      <section id="update-notes" class="update-notes" aria-label="更新内容" tabindex="0"></section>
+
+      <footer class="update-footer">
+        <p id="update-feedback" class="update-feedback" role="status" aria-live="polite"></p>
+        <div class="update-actions">
+          <button id="update-later" class="update-button update-button-secondary" type="button">
+            稍后
+          </button>
+          <button id="update-confirm" class="update-button update-button-primary" type="button">
+            下载并安装
+          </button>
+        </div>
+      </footer>
+    </main>
+    <script type="module" src="/src/windows/update/index.ts"></script>
+  </body>
+</html>

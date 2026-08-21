@@ -13,12 +13,15 @@ import {
   runtimeStageDirectory,
 } from './runtime-config.mjs';
 import { runCommand } from './run-command.mjs';
+import { verifyDshReleaseAgeExclusions } from './supply-chain-policy.mjs';
 
 /** 校验当前目标打包输入完整、自包含，并能由目标Node加载CLI。 */
 async function verifyRuntime() {
   const target = resolveRuntimeTarget();
   assertNativeTarget(target);
   const runtimeLock = await readRuntimeLock();
+  const workspaceYaml = await readFile(join(rootDirectory, 'pnpm-workspace.yaml'), 'utf8');
+  verifyDshReleaseAgeExclusions(workspaceYaml, runtimeLock.dsh.version);
   const runtimeTarget = getRuntimeTarget(runtimeLock, target);
   const nodePaths = getNodePaths(runtimeLock, target);
   const manifest = JSON.parse(

@@ -21,6 +21,8 @@ fn desktop_launch_arguments(compatibility_patch: Option<&Path>) -> Vec<OsString>
         ]);
     }
     arguments.extend([
+        // Desktop 使用内嵌 WebView；显式禁止上游同时打开系统浏览器。
+        OsString::from("--no-open"),
         OsString::from("--host"),
         OsString::from("127.0.0.1"),
         OsString::from("--port"),
@@ -171,6 +173,7 @@ mod tests {
                 OsString::from("web"),
                 OsString::from("--patch"),
                 patch.as_os_str().to_owned(),
+                OsString::from("--no-open"),
                 OsString::from("--host"),
                 OsString::from("127.0.0.1"),
                 OsString::from("--port"),
@@ -185,6 +188,7 @@ mod tests {
             desktop_launch_arguments(None),
             vec![
                 OsString::from("web"),
+                OsString::from("--no-open"),
                 OsString::from("--host"),
                 OsString::from("127.0.0.1"),
                 OsString::from("--port"),

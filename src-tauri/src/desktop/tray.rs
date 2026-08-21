@@ -6,9 +6,8 @@ use tauri::{
     App, AppHandle, Manager, Wry,
 };
 
-use super::{lifecycle::AppLifecycle, terminal::open_dsh_terminal};
+use super::actions;
 use crate::{
-    platform,
     runtime::{manager::RuntimeManager, status::RuntimeStatus},
     updater::{manager::UpdateManager, presentation::update_presentation},
 };
@@ -181,7 +180,7 @@ pub fn update_updater_status(app: &AppHandle) {
 }
 
 pub fn show_main_window(app: &AppHandle) {
-    let Some(window) = app.get_webview_window("main") else {
+    let Some(window) = app.get_window("main") else {
         return;
     };
     if window.is_minimized().unwrap_or(false) {
@@ -194,27 +193,10 @@ pub fn show_main_window(app: &AppHandle) {
 fn handle_menu_event(app: &AppHandle, id: &str) {
     match id {
         OPEN_ID => show_main_window(app),
-        TERMINAL_ID => {
-            if let Err(error) = open_dsh_terminal(app) {
-                app.state::<Arc<RuntimeManager>>()
-                    .record_system_diagnostic(&format!("打开 DSH 终端失败：{error}"));
-                platform::show_native_error(app, "无法打开 DSH 终端", &error.to_string());
-            }
-        }
-        RESTART_ID => {
-            let runtime = app.state::<Arc<RuntimeManager>>().inner().clone();
-            if let Err(error) = runtime.start(app) {
-                platform::show_native_error(app, "无法重新启动 DeepSeek Harness", &error);
-            }
-        }
-        CHECK_UPDATE_ID => crate::updater::service::spawn_manual_check(app),
-        QUIT_ID => {
-            let lifecycle = app.state::<AppLifecycle>();
-            if lifecycle.request_quit() {
-                app.state::<Arc<RuntimeManager>>().stop();
-                app.exit(0);
-            }
-        }
+        TERMINAL_ID => actions::open_terminal(app),
+        RESTART_ID => actions::restart_runtime(app),
+        CHECK_UPDATE_ID => actions::check_update(app),
+        QUIT_ID => actions::quit(app),
         _ => {}
     }
 }

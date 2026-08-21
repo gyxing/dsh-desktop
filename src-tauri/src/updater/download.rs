@@ -1,29 +1,101 @@
 use std::time::Duration;
 
-use futures_util::StreamExt;
 use reqwest::{
-    header::{
-        HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, CONTENT_LENGTH, CONTENT_RANGE, RANGE,
-    },
+    header::{HeaderValue, ACCEPT, ACCEPT_ENCODING, RANGE},
     Client, StatusCode,
 };
+use tauri::{AppHandle, Manager};
 use tauri_plugin_updater::Update;
 use thiserror::Error;
-use url::Url;
 
-use super::range::parse_content_range;
+use super::{
+    cache::{CacheError, DownloadCache, DownloadIdentity},
+    transfer::download_url_to_cache_with_policy,
+};
 
 const MAX_DOWNLOAD_ATTEMPTS: usize = 5;
-const MAX_UPDATE_BYTES: u64 = 512 * 1024 * 1024;
+pub(super) const MAX_UPDATE_BYTES: u64 = 512 * 1024 * 1024;
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+const NO_PROGRESS_TIMEOUT: Duration = Duration::from_secs(45);
 const UPDATER_USER_AGENT: &str = "DSH Desktop Updater";
 
-/// 断点续传只接受可恢复网络错误；响应偏移和签名异常必须立即失败。
+#[derive(Clone, Copy)]
+pub(super) struct DownloadPolicy {
+    pub max_attempts: usize,
+    pub response_timeout: Duration,
+    pub no_progress_timeout: Duration,
+    pub retry_delay_enabled: bool,
+}
+
+impl DownloadPolicy {
+    fn production() -> Self {
+        Self {
+            max_attempts: MAX_DOWNLOAD_ATTEMPTS,
+            response_timeout: RESPONSE_TIMEOUT,
+            no_progress_timeout: NO_PROGRESS_TIMEOUT,
+            retry_delay_enabled: true,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn for_test(max_attempts: usize, no_progress_timeout: Duration) -> Self {
+        Self {
+            max_attempts,
+            response_timeout: Duration::from_secs(1),
+            no_progress_timeout,
+            retry_delay_enabled: false,
+        }
+    }
+}
+
+/// 下载结果保留在应用私有目录，验签和安装完成后再清理。
+pub struct DownloadedUpdate {
+    cache: DownloadCache,
+}
+
+impl DownloadedUpdate {
+    pub fn path(&self) -> &std::path::Path {
+        self.cache.part_path()
+    }
+
+    pub fn size(&self) -> u64 {
+        self.cache.downloaded_len()
+    }
+
+    pub async fn read_for_install(&self) -> Result<Vec<u8>, DownloadError> {
+        let bytes = tokio::fs::read(self.path()).await?;
+        if bytes.len() as u64 != self.size() {
+            return Err(DownloadError::InvalidResponse(format!(
+                "安装前缓存大小发生变化：期望 {}，实际 {}",
+                self.size(),
+                bytes.len()
+            )));
+        }
+        Ok(bytes)
+    }
+
+    pub fn clear(self) -> Result<(), DownloadError> {
+        self.cache.clear()?;
+        Ok(())
+    }
+}
+
+/// 断点续传只接受可恢复网络错误；响应偏移、缓存和签名异常必须立即失败。
 #[derive(Debug, Error)]
 pub enum DownloadError {
     #[error(transparent)]
     Request(#[from] reqwest::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Cache(#[from] CacheError),
     #[error("下载请求返回状态 {0}")]
     Status(StatusCode),
+    #[error("下载请求在 {seconds} 秒内没有收到响应")]
+    ResponseTimeout { seconds: u64 },
+    #[error("下载连接在 {seconds} 秒内没有新数据")]
+    NoProgressTimeout { seconds: u64 },
     #[error("下载响应不符合断点续传约束：{0}")]
     InvalidResponse(String),
     #[error("下载结果不完整：已下载 {downloaded} 字节，总大小 {total} 字节")]
@@ -35,7 +107,7 @@ pub enum DownloadError {
 }
 
 impl DownloadError {
-    /// 仅网络传输、可重试状态码和正文不完整允许继续请求。
+    /// 仅网络传输、超时、可重试状态码和正文不完整允许继续请求。
     pub fn is_retryable(&self) -> bool {
         match self {
             Self::Request(error) => {
@@ -46,18 +118,25 @@ impl DownloadError {
                     || *status == StatusCode::REQUEST_TIMEOUT
                     || *status == StatusCode::TOO_MANY_REQUESTS
             }
-            Self::Incomplete { .. } => true,
-            Self::InvalidResponse(_) | Self::Configuration(_) | Self::Signature(_) => false,
+            Self::ResponseTimeout { .. }
+            | Self::NoProgressTimeout { .. }
+            | Self::Incomplete { .. } => true,
+            Self::Io(_)
+            | Self::Cache(_)
+            | Self::InvalidResponse(_)
+            | Self::Configuration(_)
+            | Self::Signature(_) => false,
         }
     }
 }
 
-/// 保留已接收字节，并在可恢复错误后通过Range从精确偏移继续下载。
+/// 把更新包保存到应用私有缓存，并在重启或网络中断后从精确偏移继续。
 pub async fn download_with_resume<P, R>(
+    app: &AppHandle,
     update: &Update,
     on_progress: P,
     on_retry: R,
-) -> Result<Vec<u8>, DownloadError>
+) -> Result<DownloadedUpdate, DownloadError>
 where
     P: FnMut(u64, Option<u64>),
     R: FnMut(u64, Option<u64>, usize, usize, &DownloadError),
@@ -70,168 +149,35 @@ where
     headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
     headers.remove(RANGE);
 
-    download_url_with_resume(
+    let cache_directory = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| DownloadError::Configuration(error.to_string()))?
+        .join("updater");
+    let identity = DownloadIdentity {
+        version: update.version.clone(),
+        url: update.download_url.to_string(),
+        signature: update.signature.clone(),
+    };
+    let mut cache = DownloadCache::prepare(&cache_directory, identity, MAX_UPDATE_BYTES)?;
+    download_url_to_cache_with_policy(
         &client,
         update.download_url.clone(),
         headers,
+        &mut cache,
+        DownloadPolicy::production(),
         on_progress,
         on_retry,
     )
-    .await
-}
-
-/// 下载指定URL并执行严格Range拼接，供Tauri包装和可控断流验收共用。
-pub(crate) async fn download_url_with_resume<P, R>(
-    client: &Client,
-    download_url: Url,
-    headers: HeaderMap,
-    mut on_progress: P,
-    mut on_retry: R,
-) -> Result<Vec<u8>, DownloadError>
-where
-    P: FnMut(u64, Option<u64>),
-    R: FnMut(u64, Option<u64>, usize, usize, &DownloadError),
-{
-    let mut buffer = Vec::new();
-    let mut expected_total = None;
-    for attempt in 1..=MAX_DOWNLOAD_ATTEMPTS {
-        match download_attempt(
-            &client,
-            &download_url,
-            &headers,
-            &mut buffer,
-            &mut expected_total,
-            &mut on_progress,
-        )
-        .await
-        {
-            Ok(()) => return Ok(buffer),
-            Err(error) if attempt < MAX_DOWNLOAD_ATTEMPTS && error.is_retryable() => {
-                on_retry(
-                    buffer.len() as u64,
-                    expected_total,
-                    attempt + 1,
-                    MAX_DOWNLOAD_ATTEMPTS,
-                    &error,
-                );
-                tokio::time::sleep(retry_delay(attempt)).await;
-            }
-            Err(error) => return Err(error),
-        }
-    }
-    unreachable!("断点续传循环必须返回结果")
-}
-
-async fn download_attempt<P>(
-    client: &Client,
-    download_url: &Url,
-    headers: &HeaderMap,
-    buffer: &mut Vec<u8>,
-    expected_total: &mut Option<u64>,
-    on_progress: &mut P,
-) -> Result<(), DownloadError>
-where
-    P: FnMut(u64, Option<u64>),
-{
-    let requested_offset = buffer.len() as u64;
-    if expected_total.is_some_and(|total| requested_offset > total) {
-        return Err(DownloadError::InvalidResponse(format!(
-            "续传偏移超过总大小：偏移 {requested_offset}，总大小 {}",
-            expected_total.unwrap_or_default()
-        )));
-    }
-    if expected_total.is_some_and(|total| requested_offset == total) {
-        return Ok(());
-    }
-
-    let mut request = client.get(download_url.clone()).headers(headers.clone());
-    if requested_offset > 0 {
-        request = request.header(RANGE, format!("bytes={requested_offset}-"));
-    }
-    let response = request.send().await?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(DownloadError::Status(status));
-    }
-
-    match status {
-        StatusCode::PARTIAL_CONTENT => {
-            let content_range = response
-                .headers()
-                .get(CONTENT_RANGE)
-                .and_then(|value| value.to_str().ok())
-                .ok_or_else(|| {
-                    DownloadError::InvalidResponse("206响应缺少Content-Range".to_string())
-                })?;
-            let parsed = parse_content_range(content_range)?;
-            if parsed.start != requested_offset {
-                return Err(DownloadError::InvalidResponse(format!(
-                    "期望从 {requested_offset} 续传，实际从 {} 返回",
-                    parsed.start
-                )));
-            }
-            if let Some(total) = expected_total {
-                if *total != parsed.total {
-                    return Err(DownloadError::InvalidResponse(format!(
-                        "续传总大小发生变化：原值 {total}，新值 {}",
-                        parsed.total
-                    )));
-                }
-            }
-            if let Some(content_length) = response_content_length(&response) {
-                let range_length = parsed.end - parsed.start + 1;
-                if content_length != range_length {
-                    return Err(DownloadError::InvalidResponse(format!(
-                        "续传Content-Length与Content-Range不一致：{content_length} != {range_length}"
-                    )));
-                }
-            }
-            ensure_size_allowed(parsed.total)?;
-            *expected_total = Some(parsed.total);
-        }
-        StatusCode::OK => {
-            // 服务端忽略Range时只能清空旧缓冲并把本次200响应作为完整文件重新接收。
-            if requested_offset > 0 {
-                buffer.clear();
-            }
-            *expected_total = response_content_length(&response);
-            if let Some(total) = expected_total {
-                ensure_size_allowed(*total)?;
-            }
-        }
-        _ => {
-            return Err(DownloadError::InvalidResponse(format!(
-                "下载响应状态不受支持：{status}"
-            )));
-        }
-    }
-
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk?;
-        let next_size = buffer.len() as u64 + chunk.len() as u64;
-        ensure_size_allowed(next_size)?;
-        buffer.extend_from_slice(&chunk);
-        on_progress(buffer.len() as u64, *expected_total);
-    }
-
-    if let Some(total) = *expected_total {
-        let downloaded = buffer.len() as u64;
-        if downloaded < total {
-            return Err(DownloadError::Incomplete { downloaded, total });
-        }
-        if downloaded > total {
-            return Err(DownloadError::InvalidResponse(format!(
-                "下载字节超过声明总大小：已下载 {downloaded}，总大小 {total}"
-            )));
-        }
-    }
-    Ok(())
+    .await?;
+    Ok(DownloadedUpdate { cache })
 }
 
 fn build_client(update: &Update) -> Result<Client, DownloadError> {
     install_crypto_provider();
-    let mut builder = Client::builder().user_agent(UPDATER_USER_AGENT);
+    let mut builder = Client::builder()
+        .user_agent(UPDATER_USER_AGENT)
+        .connect_timeout(CONNECT_TIMEOUT);
     if let Some(timeout) = update.timeout {
         builder = builder.timeout(timeout);
     }
@@ -250,23 +196,6 @@ pub(crate) fn install_crypto_provider() {
     }
 }
 
-fn response_content_length(response: &reqwest::Response) -> Option<u64> {
-    response
-        .headers()
-        .get(CONTENT_LENGTH)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse().ok())
-}
-
-fn ensure_size_allowed(size: u64) -> Result<(), DownloadError> {
-    if size > MAX_UPDATE_BYTES {
-        return Err(DownloadError::InvalidResponse(format!(
-            "更新包超过512 MB安全上限：{size}字节"
-        )));
-    }
-    Ok(())
-}
-
-fn retry_delay(failed_attempt: usize) -> Duration {
-    Duration::from_secs(1_u64 << (failed_attempt - 1).min(3))
-}
+#[cfg(test)]
+#[path = "download_tests.rs"]
+mod tests;

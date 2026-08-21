@@ -102,6 +102,16 @@ jobs:
           }
       - name: 暂存固定运行时
         run: corepack pnpm runtime:stage -- --target ${{ matrix.target }}
+      - name: 准备公开构建信息
+        shell: pwsh
+        run: |
+          $buildTimestamp = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+          $buildId = (git rev-parse --short=7 HEAD).Trim()
+          if ($buildId -notmatch '^[0-9a-f]{7}$') {
+            throw "构建标识格式无效：$buildId"
+          }
+          "DSH_DESKTOP_BUILD_TIMESTAMP=$buildTimestamp" >> $env:GITHUB_ENV
+          "DSH_DESKTOP_BUILD_ID=$buildId" >> $env:GITHUB_ENV
       - name: 执行完整检查
         run: corepack pnpm check
       - name: 读取内置 DSH 版本
@@ -109,6 +119,21 @@ jobs:
         run: |
           $runtimeLock = Get-Content -LiteralPath runtime/runtime-lock.json -Raw -Encoding UTF8 | ConvertFrom-Json
           "DSH_VERSION=$($runtimeLock.dsh.version)" >> $env:GITHUB_ENV
+      - name: 读取版本更新说明
+        shell: pwsh
+        run: |
+          $notesPath = "release-notes/$env:GITHUB_REF_NAME.md"
+          if (-not (Test-Path -LiteralPath $notesPath -PathType Leaf)) {
+            throw "缺少当前版本更新说明：$notesPath"
+          }
+          $releaseBody = (Get-Content -LiteralPath $notesPath -Raw -Encoding UTF8).Replace('{{DSH_VERSION}}', $env:DSH_VERSION)
+          if ($releaseBody -match '\{\{[^}]+\}\}') {
+            throw "更新说明仍包含未替换占位符：$notesPath"
+          }
+          $delimiter = "DSH_RELEASE_NOTES_$env:GITHUB_RUN_ID"
+          "RELEASE_BODY<<$delimiter" >> $env:GITHUB_ENV
+          $releaseBody >> $env:GITHUB_ENV
+          $delimiter >> $env:GITHUB_ENV
       - name: 构建并上传跨平台资产
         id: tauri
         uses: tauri-apps/tauri-action@v1
@@ -119,54 +144,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: DSH Desktop ${{ github.ref_name }}
-          releaseBody: |
-            ## 中文说明
-
-            DSH Desktop 是 DeepSeek Harness 的第三方跨平台桌面封装，本版本内置 DeepSeek Harness `${{ env.DSH_VERSION }}`。
-
-            ### 安装说明
-
-            - Windows x64：下载 `*_x64-setup.exe`，以全机模式安装，系统可能要求管理员权限。
-            - macOS：Apple Silicon 选择 ARM64 DMG，Intel Mac 选择 x64 DMG。当前包未做 Apple Developer 签名和公证，仅供内部测试。
-            - Linux x64：可直接运行 AppImage，或在 Debian/Ubuntu 上安装 deb 包。
-            - 现有 DSH Profile、模型配置、插件、缓存和凭据不会被迁移或重写。
-
-            ### 更新与签名
-
-            - Windows NSIS 和 Linux AppImage 进入 Tauri Updater 在线更新清单。
-            - Linux deb 由用户手动升级；macOS 在完成 Apple 正式签名前不进入公开更新清单。
-            - `*.sig` 只用于应用内更新验签，不等同于 Windows Authenticode、Apple Developer 签名或 Linux 发行签名。
-
-            ### 已知限制
-
-            - Windows 未配置 Authenticode，可能显示未知发布者或 SmartScreen 提示。
-            - macOS 未签名、未公证，Gatekeeper 可能阻止直接启动。
-            - macOS 与 Linux 仍需在对应真实桌面环境完成最终输入、剪贴板、托盘和终端验收。
-
-            ---
-
-            ## English
-
-            DSH Desktop is a third-party cross-platform desktop wrapper for DeepSeek Harness. This release bundles DeepSeek Harness `${{ env.DSH_VERSION }}`.
-
-            ### Installation
-
-            - Windows x64: download `*_x64-setup.exe`. It installs per machine and may request administrator privileges.
-            - macOS: use the ARM64 DMG on Apple Silicon or the x64 DMG on Intel Macs. These builds are unsigned and unnotarized internal test packages.
-            - Linux x64: run the AppImage directly, or install the deb package on Debian/Ubuntu.
-            - Existing DSH profiles, model settings, plugins, caches, and credentials are not migrated or rewritten.
-
-            ### Updates and signing
-
-            - Windows NSIS and Linux AppImage are included in the Tauri Updater manifest.
-            - Linux deb upgrades remain manual. macOS is excluded from public updates until Apple signing is configured.
-            - `*.sig` files protect in-app updates only; they are not Windows Authenticode, Apple Developer signing, or Linux distribution signatures.
-
-            ### Known limitations
-
-            - Windows may show an unknown publisher or SmartScreen warning because Authenticode is not configured.
-            - macOS Gatekeeper may block direct launch because the app is unsigned and unnotarized.
-            - macOS and Linux still require final input, clipboard, tray, and terminal acceptance on real desktop environments.
+          releaseBody: ${{ env.RELEASE_BODY }}
           releaseDraft: true
           prerelease: false
           generateReleaseNotes: true
