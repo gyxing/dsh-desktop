@@ -14,7 +14,8 @@ use crate::{
 };
 
 const NODE_SHIM: &str = "#!/bin/sh\nexec \"$DSH_DESKTOP_NODE\" \"$@\"\n";
-const DSH_SHIM: &str = "#!/bin/sh\nexec \"$DSH_DESKTOP_NODE\" \"$DSH_DESKTOP_DSH_ENTRY\" \"$@\"\n";
+const DSH_SHIM: &str =
+    "#!/bin/sh\nexec \"$DSH_DESKTOP_NODE\" --expose-internals \"$DSH_DESKTOP_DSH_ENTRY\" \"$@\"\n";
 const PNPM_SHIM: &str =
     "#!/bin/sh\nexec \"$DSH_DESKTOP_NODE\" \"$DSH_DESKTOP_PNPM_ENTRY\" \"$@\"\n";
 

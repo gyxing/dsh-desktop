@@ -24,7 +24,7 @@ use windows_sys::Win32::System::Threading::CREATE_NEW_CONSOLE;
 #[cfg(windows)]
 const NODE_SHIM: &str = "@echo off\r\n\"%DSH_DESKTOP_NODE%\" %*\r\nexit /b %errorlevel%\r\n";
 #[cfg(windows)]
-const DSH_SHIM: &str = "@echo off\r\n\"%DSH_DESKTOP_NODE%\" \"%DSH_DESKTOP_DSH_ENTRY%\" %*\r\nexit /b %errorlevel%\r\n";
+const DSH_SHIM: &str = "@echo off\r\n\"%DSH_DESKTOP_NODE%\" --expose-internals \"%DSH_DESKTOP_DSH_ENTRY%\" %*\r\nexit /b %errorlevel%\r\n";
 #[cfg(windows)]
 const PNPM_SHIM: &str = "@echo off\r\n\"%DSH_DESKTOP_NODE%\" \"%DSH_DESKTOP_PNPM_ENTRY%\" %*\r\nexit /b %errorlevel%\r\n";
 
@@ -324,7 +324,7 @@ mod tests {
             .contains("%DSH_DESKTOP_NODE%"));
         assert!(fs::read_to_string(directory.join("dsh.cmd"))
             .expect("dsh shim 应可读")
-            .contains("%DSH_DESKTOP_DSH_ENTRY%"));
+            .contains("--expose-internals \"%DSH_DESKTOP_DSH_ENTRY%\""));
         assert!(fs::read_to_string(directory.join("pnpm.cmd"))
             .expect("pnpm shim 应可读")
             .contains("%DSH_DESKTOP_PNPM_ENTRY%"));
@@ -349,7 +349,7 @@ mod tests {
         let versions = runtime_versions().expect("运行时锁应能解析");
 
         assert_eq!(versions.node, "24.19.0");
-        assert_eq!(versions.dsh, "0.1.1-rc.2");
+        assert_eq!(versions.dsh, "0.1.2-rc.1");
         assert_eq!(versions.pnpm, "11.22.0");
     }
 }

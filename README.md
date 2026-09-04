@@ -18,7 +18,7 @@
 ## 固定版本
 
 - Node.js：24.19.0；按 Windows x64、macOS ARM64/x64、Linux x64 分别锁定官方制品并校验 SHA-256。
-- `@deepseek-ai/dsh`：0.1.1-rc.2，使用 pnpm 锁文件和 npm integrity。
+- `@deepseek-ai/dsh`：0.1.2-rc.1，使用 pnpm 锁文件和 npm integrity。
 - Tauri：2.11.x，各 Rust 与 npm 依赖使用精确版本。
 
 真实锁定信息见 `runtime/runtime-lock.json`。每个平台必须在匹配架构的原生构建机上部署自己的依赖树和原生模块；Windows 继续使用 hoisted 实体目录，避免目录联接在 Tauri 复制资源时丢失。

@@ -18,7 +18,7 @@ DSH Desktop packages the native [DeepSeek Harness](https://github.com/deepseek-a
 ## Pinned Versions
 
 - Node.js: 24.19.0, with official artifacts pinned and SHA-256 verified for Windows x64, macOS ARM64/x64, and Linux x64.
-- `@deepseek-ai/dsh`: 0.1.1-rc.2, locked with pnpm and npm integrity metadata.
+- `@deepseek-ai/dsh`: 0.1.2-rc.1, locked with pnpm and npm integrity metadata.
 - Tauri: 2.11.x, with exact Rust and npm dependency versions.
 
 See `runtime/runtime-lock.json` for the authoritative lock metadata. Each target is deployed on a matching native build host with its own dependency tree and native modules. Windows continues to use a hoisted physical directory so directory junctions are not lost while Tauri copies resources.

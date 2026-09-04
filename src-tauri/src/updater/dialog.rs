@@ -105,9 +105,9 @@ pub fn show_release_notes(app: &AppHandle, version: &str, notes: Option<&str>) {
 pub fn show_preview(app: &AppHandle) {
     let manager = app.state::<Arc<UpdateDialogManager>>();
     let payload = payload(
-        "0.1.3",
+        "0.1.4",
         Some(
-            "## 本版更新\n\n- 下载中断后自动从磁盘断点续传\n- 显示下载速度、剩余时间和续传次数\n- 新增顶部原生菜单和发布后公开烟测\n\n更新内容较长时，只滚动中间区域，窗口高度保持不变。",
+            "## 本版更新\n\n- 内置 DeepSeek Harness 升级到 0.1.2-rc.1\n- 修复 HMR 启动参数兼容性\n- 下载中断后自动从磁盘断点续传\n\n更新内容较长时，只滚动中间区域，窗口高度保持不变。",
         ),
         true,
     );

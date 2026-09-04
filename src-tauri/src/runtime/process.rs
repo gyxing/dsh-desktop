@@ -31,6 +31,16 @@ fn desktop_launch_arguments(compatibility_patch: Option<&Path>) -> Vec<OsString>
     arguments
 }
 
+/// 生成 Node 进程参数；HMR 依赖 Node 内部 loader 状态，必须位于 DSH 入口之前。
+fn node_launch_arguments(dsh_entry: &Path, compatibility_patch: Option<&Path>) -> Vec<OsString> {
+    let mut arguments = vec![
+        OsString::from("--expose-internals"),
+        dsh_entry.as_os_str().to_owned(),
+    ];
+    arguments.extend(desktop_launch_arguments(compatibility_patch));
+    arguments
+}
+
 /// Sidecar输出与退出事件，保持运行时状态机不依赖具体进程库。
 #[derive(Debug)]
 pub enum RuntimeEvent {
@@ -63,8 +73,8 @@ pub fn spawn(
 ) -> Result<(UnboundedReceiver<RuntimeEvent>, ManagedChild), String> {
     let mut command = Command::new(&paths.node_executable);
     command
-        .arg(&paths.dsh_entry)
-        .args(desktop_launch_arguments(
+        .args(node_launch_arguments(
+            &paths.dsh_entry,
             paths.compatibility_patch.as_deref(),
         ))
         .current_dir(&paths.working_directory)
@@ -161,7 +171,7 @@ where
 mod tests {
     use std::{ffi::OsString, path::Path};
 
-    use super::desktop_launch_arguments;
+    use super::{desktop_launch_arguments, node_launch_arguments};
 
     #[test]
     fn desktop_compatibility_patch_is_applied_after_profile_layers() {
@@ -187,6 +197,25 @@ mod tests {
         assert_eq!(
             desktop_launch_arguments(None),
             vec![
+                OsString::from("web"),
+                OsString::from("--no-open"),
+                OsString::from("--host"),
+                OsString::from("127.0.0.1"),
+                OsString::from("--port"),
+                OsString::from("0"),
+            ]
+        );
+    }
+
+    #[test]
+    fn node_launch_exposes_loader_internals_before_dsh_entry() {
+        let dsh_entry = Path::new("resources/dsh-runtime/node_modules/@deepseek-ai/dsh/lib/bin.js");
+
+        assert_eq!(
+            node_launch_arguments(dsh_entry, None),
+            vec![
+                OsString::from("--expose-internals"),
+                dsh_entry.as_os_str().to_owned(),
                 OsString::from("web"),
                 OsString::from("--no-open"),
                 OsString::from("--host"),
