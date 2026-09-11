@@ -18,7 +18,7 @@
 ## 固定版本
 
 - Node.js：24.19.0；按 Windows x64、macOS ARM64/x64、Linux x64 分别锁定官方制品并校验 SHA-256。
-- `@deepseek-ai/dsh`：0.1.2-rc.1，使用 pnpm 锁文件和 npm integrity。
+- `@deepseek-ai/dsh`：0.1.5-rc.2，使用 pnpm 锁文件和 npm integrity。
 - Tauri：2.11.x，各 Rust 与 npm 依赖使用精确版本。
 
 真实锁定信息见 `runtime/runtime-lock.json`。每个平台必须在匹配架构的原生构建机上部署自己的依赖树和原生模块；Windows 继续使用 hoisted 实体目录，避免目录联接在 Tauri 复制资源时丢失。
@@ -84,7 +84,7 @@ Linux 提供 AppImage 和 deb。AppImage 可进入应用内更新清单；deb �
 corepack pnpm runtime:check-upstream
 ```
 
-检查只读比较 npm 最新发布版本与 integrity；GitHub master SHA 仅作为源码演进观察点，不代表 npm 包的源码证明。命令不会自动替换运行时。检测到发布更新后：
+检查只读比较 npm 发布线（`dist-tags` 的 `latest` 与 `next`，取其中更高者）与锁定版本的 integrity：锁定版本自身被重新发布或已从 npm 撤回、或上游出现更高的发布版本时退出码为 10；稳定版与预发布版按 SemVer 比较，因此锁定 `next` 预发布不会被 `latest` 更低的正式号误判为漂移。GitHub master SHA 仅作为源码演进观察点，不代表 npm 包的源码证明。命令不会自动替换运行时。检测到上游更新后：
 
 1. 审查上游配置、协议、Provider 和原生依赖变化。
 2. 更新 `runtime/package.json` 与 `runtime/runtime-lock.json` 的精确版本、integrity 和 master 观察点。

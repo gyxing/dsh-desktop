@@ -41,11 +41,11 @@
     }
   },
   "dsh": {
-    "version": "0.1.2-rc.1",
-    "integrity": "sha512-RPq48TzxvwpdT9/7W1tbhZDBMmeK+bxDrX9cqQC27Wx/LqtgJF8PSa3b3xriU8oxtvhwYmk21w2cej3uMQrnVA==",
-    "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.1.2-rc.1.tgz",
-    "shasum": "fef213043313affc36ca2226d2637ad483b5e3f6",
-    "observedMasterCommit": "76fda729799fe9b3848dbe2c211d4b231032b81e",
-    "checkedAt": "2026-09-04T10:44:04+08:00"
+    "version": "0.1.5-rc.2",
+    "integrity": "sha512-8Xc8hCQHcIWRmTCVU/xZdp6/qMsWMeAd2ObChKDEsfhUPJFXx6H0lgeb1DxUMD86HZrrVN+1bCvn1ppjZ/fOxw==",
+    "tarball": "https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.1.5-rc.2.tgz",
+    "shasum": "2c78db39568d910868f1e4f34062a4f346d4815d",
+    "observedMasterCommit": "c291e7961a515f6d7af9304e7fd1d257929aef26",
+    "checkedAt": "2026-09-11T15:05:00+08:00"
   }
 }

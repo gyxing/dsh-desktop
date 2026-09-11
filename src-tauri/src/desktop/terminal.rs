@@ -349,7 +349,7 @@ mod tests {
         let versions = runtime_versions().expect("运行时锁应能解析");
 
         assert_eq!(versions.node, "24.19.0");
-        assert_eq!(versions.dsh, "0.1.2-rc.1");
+        assert_eq!(versions.dsh, "0.1.5-rc.2");
         assert_eq!(versions.pnpm, "11.22.0");
     }
 }

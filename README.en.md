@@ -18,7 +18,7 @@ DSH Desktop packages the native [DeepSeek Harness](https://github.com/deepseek-a
 ## Pinned Versions
 
 - Node.js: 24.19.0, with official artifacts pinned and SHA-256 verified for Windows x64, macOS ARM64/x64, and Linux x64.
-- `@deepseek-ai/dsh`: 0.1.2-rc.1, locked with pnpm and npm integrity metadata.
+- `@deepseek-ai/dsh`: 0.1.5-rc.2, locked with pnpm and npm integrity metadata.
 - Tauri: 2.11.x, with exact Rust and npm dependency versions.
 
 See `runtime/runtime-lock.json` for the authoritative lock metadata. Each target is deployed on a matching native build host with its own dependency tree and native modules. Windows continues to use a hoisted physical directory so directory junctions are not lost while Tauri copies resources.
@@ -84,7 +84,7 @@ Linux provides AppImage and deb packages. AppImage can participate in in-app upd
 corepack pnpm runtime:check-upstream
 ```
 
-This read-only command treats the latest npm version and integrity metadata as the release signal. The GitHub master SHA is only a source-evolution observation point, not proof of the npm package source. The command never replaces the packaged runtime automatically. When a published update is detected:
+This read-only command compares the npm release line (the higher of the `dist-tags` `latest` and `next` entries) and the integrity of the locked version. It exits with code 10 when the locked version itself was republished or withdrawn from npm, or when a higher release exists upstream. Stable and prerelease versions are compared with SemVer, so locking a `next` prerelease is not misreported as drift just because `latest` carries a lower version. The GitHub master SHA is only a source-evolution observation point, not proof of the npm package source. The command never replaces the packaged runtime automatically. When an upstream update is detected:
 
 1. Review upstream configuration, protocol, provider, and native dependency changes.
 2. Update the exact version, integrity, and master observation point in `runtime/package.json` and `runtime/runtime-lock.json`.
