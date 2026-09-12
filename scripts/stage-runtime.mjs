@@ -111,6 +111,20 @@ async function pruneUnusedNativeArtifacts(target) {
       join(runtimeStageDirectory, 'node_modules', '@koromix', 'koffi-linux-x64', 'musl_x64'),
       { recursive: true, force: true },
     );
+    // node-addon-system 同时携带glibc与musl Node-API制品；linuxdeploy无法解析musl制品，
+    // Linux GNU目标只保留glibc版本，landlock-run静态启动器继续保留。
+    await rm(
+      join(
+        runtimeStageDirectory,
+        'node_modules',
+        '@deepseek-ai',
+        'node-addon-system-linux-x64',
+        'bin',
+        'musl',
+        'system.node',
+      ),
+      { force: true },
+    );
   }
 }
 
